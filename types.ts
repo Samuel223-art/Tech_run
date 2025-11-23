@@ -23,8 +23,6 @@ export enum ObjectType {
   MISSILE = 'MISSILE',
   POWERUP_INVINCIBILITY = 'POWERUP_INVINCIBILITY',
   POWERUP_SCORE_MULTIPLIER = 'POWERUP_SCORE_MULTIPLIER',
-  LAVA_WARNING = 'LAVA_WARNING',
-  LAVA_BOMB = 'LAVA_BOMB'
 }
 
 export interface GameObject {
@@ -38,7 +36,6 @@ export interface GameObject {
   points?: number; // Score value for gems
   hasFired?: boolean; // For Aliens
   powerUpType?: 'INVINCIBILITY' | 'SCORE_MULTIPLIER';
-  lifetime?: number; // in seconds, for temporary objects
 }
 
 export const LANE_WIDTH = 2.2;

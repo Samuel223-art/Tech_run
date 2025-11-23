@@ -60,9 +60,9 @@ export const Player: React.FC = () => {
       const armorColor = isInvincible ? '#ffd700' : '#445566';
       
       const themeGlow = {
-          1: '#00aaff', // Coral Reef Blue
+          1: '#ff6a00', // Volcanic Realm Orange
           2: '#ff44ff', // Crystal Cave Magenta
-          3: '#ff8800', // Volcano Orange
+          3: '#ff8800', // Coastal Run Sunset
       }[visualLevel] || '#00aaff';
       
       const glowColor = isInvincible ? '#ffffff' : themeGlow;

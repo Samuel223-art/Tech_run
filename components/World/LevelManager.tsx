@@ -13,16 +13,45 @@ import { useStore } from '../../store';
 import { GameObject, ObjectType, LANE_WIDTH, SPAWN_DISTANCE, REMOVE_DISTANCE, GameStatus, GEMINI_COLORS } from '../../types';
 import { audio } from '../System/Audio';
 
+// Helper to create a multi-colored beach ball geometry
+const createBeachBallGeo = (): THREE.BufferGeometry => {
+    const geo = new THREE.SphereGeometry(0.8, 32, 16);
+    const colorsAttr: number[] = [];
+    const palette = [
+        new THREE.Color('#e63946'), // Red
+        new THREE.Color('#f1faee'), // White
+        new THREE.Color('#457b9d'), // Blue
+        new THREE.Color('#ffc300'), // Yellow
+    ];
+
+    const position = geo.attributes.position;
+    for (let i = 0; i < position.count; i++) {
+        const x = position.getX(i);
+        const z = position.getZ(i);
+        // atan2 gives angle from -PI to PI. Map it to 0-1
+        const angle = Math.atan2(z, x);
+        const t = (angle / (Math.PI * 2)) + 0.5;
+        // 4 segments for the 4 colors
+        const segmentIndex = Math.floor(t * 4);
+        const color = palette[segmentIndex % 4];
+        colorsAttr.push(color.r, color.g, color.b);
+    }
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(colorsAttr, 3));
+    return geo;
+};
+const BEACH_BALL_GEO = createBeachBallGeo();
+
+
 // --- Level Themed Geometries ---
 const OBSTACLE_GEOS = {
     1: new THREE.IcosahedronGeometry(0.8, 1),      // Sea Urchin
     2: new THREE.ConeGeometry(0.8, 2.5, 6),      // Crystal Stalagmite
-    3: new THREE.DodecahedronGeometry(0.9, 0),     // Lava Rock
+    3: BEACH_BALL_GEO,     // Beach Ball
 };
 const OBSTACLE_GLOW_GEOS = {
     1: new THREE.IcosahedronGeometry(0.82, 1),
     2: new THREE.ConeGeometry(0.82, 2.52, 6),
-    3: new THREE.DodecahedronGeometry(0.92, 0),
+    3: new THREE.SphereGeometry(0.82, 16, 8),
 };
 const GEM_GEOS = {
     1: new THREE.SphereGeometry(0.3, 16, 16),     // Pearl
@@ -42,8 +71,6 @@ const SHADOW_SQUID_GEO = new THREE.CircleGeometry(0.8, 32);
 const SHADOW_INK_BLAST_GEO = new THREE.CircleGeometry(0.5, 32);
 const SHADOW_DEFAULT_GEO = new THREE.CircleGeometry(0.8, 6);
 const WHIRLPOOL_GEO = new THREE.PlaneGeometry(1, 1, 64, 64);
-const LAVA_WARNING_GEO = new THREE.CircleGeometry(1, 32);
-const LAVA_BOMB_GEO = new THREE.SphereGeometry(0.8, 16, 16);
 
 const PARTICLE_COUNT = 600;
 const BASE_LETTER_INTERVAL = 150; 
@@ -133,7 +160,6 @@ export const LevelManager: React.FC = () => {
   const playerObjRef = useRef<THREE.Object3D | null>(null);
   const distanceTraveled = useRef(0);
   const nextLetterDistance = useRef(BASE_LETTER_INTERVAL);
-  const eruptionTimer = useRef(5);
 
   useEffect(() => {
     const isRestart = status === GameStatus.PLAYING && prevStatus.current === GameStatus.GAME_OVER;
@@ -183,16 +209,6 @@ export const LevelManager: React.FC = () => {
         const prevZ = obj.position[2];
         obj.position[2] += moveAmount;
 
-        if (obj.lifetime && obj.lifetime > 0) {
-            obj.lifetime -= safeDelta;
-            if(obj.lifetime <= 0) {
-                if(obj.type === ObjectType.LAVA_WARNING) {
-                    newSpawns.push({ id: uuidv4(), type: ObjectType.LAVA_BOMB, position: obj.position, active: true, color: '#ff6600' });
-                }
-                obj.active = false;
-            }
-        }
-        
         if (obj.type === ObjectType.ALIEN && obj.active && !obj.hasFired) {
              if (obj.position[2] > -90) {
                  obj.hasFired = true;
@@ -213,16 +229,14 @@ export const LevelManager: React.FC = () => {
                 }
             } else if (inZZone) {
                 if (Math.abs(obj.position[0] - playerPos.x) < 0.9) {
-                     const isDamageSource = obj.type === ObjectType.OBSTACLE || obj.type === ObjectType.ALIEN || obj.type === ObjectType.MISSILE || obj.type === ObjectType.LAVA_BOMB;
+                     const isDamageSource = obj.type === ObjectType.OBSTACLE || obj.type === ObjectType.ALIEN || obj.type === ObjectType.MISSILE;
                      if (isDamageSource) {
                          const playerBottom = playerPos.y; const playerTop = playerPos.y + 1.8;
                          let objBottom = obj.position[1] - 0.5, objTop = obj.position[1] + 0.5;
                          if (obj.type === ObjectType.OBSTACLE) { objBottom = 0; objTop = 1.6; }
-                         if (obj.type === ObjectType.LAVA_BOMB) { objBottom = 0; objTop = 1.0; }
                          if ((playerBottom < objTop) && (playerTop > objBottom)) { 
                              window.dispatchEvent(new Event('player-hit')); obj.active = false; hasChanges = true;
                              if (obj.type === ObjectType.MISSILE) window.dispatchEvent(new CustomEvent('particle-burst', { detail: { position: obj.position, color: '#330033', burstAmount: 60 } }));
-                             if (obj.type === ObjectType.LAVA_BOMB) window.dispatchEvent(new CustomEvent('particle-burst', { detail: { position: obj.position, color: '#ff4400', burstAmount: 100 } }));
                          }
                      } else {
                          if (Math.abs(obj.position[1] - playerPos.y) < 2.5) {
@@ -246,25 +260,13 @@ export const LevelManager: React.FC = () => {
 
     if (newSpawns.length > 0) keptObjects.push(...newSpawns);
 
-    if (visualLevel === 3) {
-        eruptionTimer.current -= safeDelta;
-        if (eruptionTimer.current <= 0) {
-            const lane = getRandomLane(laneCount);
-            keptObjects.push({
-                id: uuidv4(), type: ObjectType.LAVA_WARNING,
-                position: [lane * LANE_WIDTH, 0.05, playerPos.z - 50],
-                active: true, color: '#ff0000', lifetime: 1.5
-            });
-            eruptionTimer.current = 2 + Math.random() * 3;
-            hasChanges = true;
-        }
-    }
-
     let furthestZ = Math.min(0, ...keptObjects.filter(o => o.type !== ObjectType.MISSILE).map(o => o.position[2]));
+    
+    const currentSpawnDistance = SPAWN_DISTANCE + (level - 1) * 60;
 
-    if (furthestZ > -SPAWN_DISTANCE) {
+    if (furthestZ > -currentSpawnDistance) {
          const minGap = 12 + (speed * 0.4); 
-         const spawnZ = Math.min(furthestZ - minGap, -SPAWN_DISTANCE);
+         const spawnZ = Math.min(furthestZ - minGap, -currentSpawnDistance);
          const isLetterDue = distanceTraveled.current >= nextLetterDistance.current;
 
          if (isLetterDue) {
@@ -317,20 +319,18 @@ const GameEntity: React.FC<{ data: GameObject, visualLevel: number }> = React.me
     const visualRef = useRef<THREE.Group>(null);
     const shadowRef = useRef<THREE.Mesh>(null);
     const whirlpoolMatRef = useRef<THREE.ShaderMaterial>(null);
-    const lavaWarningMatRef = useRef<THREE.ShaderMaterial>(null);
     const { laneCount } = useStore();
     
     useFrame((state, delta) => {
         if (groupRef.current) groupRef.current.position.set(data.position[0], 0, data.position[2]);
         if (whirlpoolMatRef.current) whirlpoolMatRef.current.uniforms.uTime.value = state.clock.elapsedTime;
-        if (lavaWarningMatRef.current && data.lifetime) lavaWarningMatRef.current.uniforms.uProgress.value = 1.0 - (data.lifetime / 1.5);
 
         if (visualRef.current) {
             const baseHeight = data.position[1];
             if (data.type === ObjectType.ALIEN) {
                  visualRef.current.position.y = baseHeight + Math.sin(state.clock.elapsedTime * 3) * 0.3;
                  visualRef.current.rotation.y += delta * 0.5;
-            } else if (data.type !== ObjectType.OBSTACLE && data.type !== ObjectType.SHOP_PORTAL && data.type !== ObjectType.LAVA_BOMB) {
+            } else if (data.type !== ObjectType.OBSTACLE && data.type !== ObjectType.SHOP_PORTAL) {
                 visualRef.current.rotation.y += delta * 2;
                 const bobOffset = Math.sin(state.clock.elapsedTime * 4 + data.position[0]) * 0.1;
                 visualRef.current.position.y = baseHeight + bobOffset;
@@ -344,15 +344,15 @@ const GameEntity: React.FC<{ data: GameObject, visualLevel: number }> = React.me
     const shadowGeo = useMemo(() => {
         if (data.type === ObjectType.LETTER) return SHADOW_LETTER_GEO;
         if (data.type === ObjectType.GEM || data.powerUpType) return SHADOW_GEM_GEO;
-        if (data.type === ObjectType.SHOP_PORTAL || data.type === ObjectType.LAVA_WARNING || data.type === ObjectType.LAVA_BOMB) return null;
+        if (data.type === ObjectType.SHOP_PORTAL) return null;
         if (data.type === ObjectType.ALIEN) return SHADOW_SQUID_GEO;
         if (data.type === ObjectType.MISSILE) return SHADOW_INK_BLAST_GEO;
         return SHADOW_DEFAULT_GEO; 
     }, [data.type, data.powerUpType]);
     
     const colors = useMemo(() => ({
-        obstacle: { 1: '#331122', 2: '#442266', 3: '#662211' }[visualLevel],
-        obstacleGlow: { 1: '#ff4499', 2: '#ee82ee', 3: '#ff8800' }[visualLevel],
+        obstacle: { 1: '#331122', 2: '#442266', 3: '#ffffff' }[visualLevel],
+        obstacleGlow: { 1: '#ff4499', 2: '#ee82ee', 3: '#00ffff' }[visualLevel],
         gem: { 1: '#ffffff', 2: '#ffd700', 3: '#ff88ff' }[visualLevel],
         gemEmissive: { 1: '#dddddd', 2: '#ff88ff', 3: '#ff00ff' }[visualLevel],
     }), [visualLevel]);
@@ -361,18 +361,8 @@ const GameEntity: React.FC<{ data: GameObject, visualLevel: number }> = React.me
         <group ref={groupRef}>
             {shadowGeo && <mesh ref={shadowRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.03, 0]} geometry={shadowGeo}><meshBasicMaterial color="#000000" opacity={0.3} transparent /></mesh>}
             <group ref={visualRef} position={[0, data.position[1], 0]}>
-                {data.type === ObjectType.LAVA_WARNING && (
-                    <mesh rotation={[-Math.PI/2, 0, 0]} geometry={LAVA_WARNING_GEO}>
-                        <shaderMaterial ref={lavaWarningMatRef} transparent depthWrite={false}
-                            uniforms={{ uProgress: { value: 0 }, uColor: { value: new THREE.Color('#ff2200') } }}
-                            vertexShader={`varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`}
-                            fragmentShader={`uniform float uProgress; uniform vec3 uColor; varying vec2 vUv; void main() { float dist = distance(vUv, vec2(0.5)); float opacity = smoothstep(0.5, 0.4, dist); float ring = smoothstep(0.0, 0.1, abs(dist - uProgress * 0.5)); opacity *= ring; gl_FragColor = vec4(uColor, opacity * (1.0 - uProgress)); }`}
-                        />
-                    </mesh>
-                )}
-                {data.type === ObjectType.LAVA_BOMB && (<mesh geometry={LAVA_BOMB_GEO}><meshStandardMaterial color="#220500" emissive="#ff4400" emissiveIntensity={3} roughness={0.7} /></mesh>)}
                 {data.type === ObjectType.SHOP_PORTAL && (<><Center position={[0, 5, 0.6]}><Text3D font={FONT_URL} size={1.2} height={0.2}>ABYSSAL FORGE<meshBasicMaterial color="#ffff00" /></Text3D></Center><mesh rotation={[-Math.PI/2, 0, 0]} scale={[laneCount * LANE_WIDTH * 1.5, laneCount * LANE_WIDTH * 1.5, 1]} geometry={WHIRLPOOL_GEO}><shaderMaterial ref={whirlpoolMatRef} transparent uniforms={{ uTime: { value: 0 }, uColor: { value: new THREE.Color('#00ffff') } }} vertexShader={`varying vec2 vUv; uniform float uTime; void main() { vUv = uv; vec2 c = vec2(0.5, 0.5); float d = distance(vUv, c); float a = atan(vUv.y - c.y, vUv.x - c.x); float r = d * (1.0 + 0.2 * sin(d * 10.0 - uTime * 2.0)); vec3 pos = position; pos.z += sin(d * 10.0 + uTime) * 0.2; gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0); }`} fragmentShader={`varying vec2 vUv; uniform float uTime; uniform vec3 uColor; void main() { vec2 c = vec2(0.5, 0.5); float d = distance(vUv, c); float a = atan(vUv.y - c.y, vUv.x - c.x) / (2.0 * 3.14159); float spiral = mod(a + d * 5.0 - uTime * 0.5, 0.2); float alpha = smoothstep(0.5, 0.0, d) * (1.0 - smoothstep(0.05, 0.0, spiral)); gl_FragColor = vec4(uColor, alpha); }`} /></mesh></>)}
-                {data.type === ObjectType.OBSTACLE && (<group><mesh geometry={OBSTACLE_GEOS[visualLevel as keyof typeof OBSTACLE_GEOS]} castShadow><meshStandardMaterial color={colors.obstacle} roughness={0.6} metalness={0.2} flatShading /></mesh><mesh geometry={OBSTACLE_GLOW_GEOS[visualLevel as keyof typeof OBSTACLE_GLOW_GEOS]}><meshBasicMaterial color={colors.obstacleGlow} wireframe transparent opacity={0.3} /></mesh></group>)}
+                {data.type === ObjectType.OBSTACLE && (<group><mesh geometry={OBSTACLE_GEOS[visualLevel as keyof typeof OBSTACLE_GEOS]} castShadow><meshStandardMaterial color={colors.obstacle} roughness={0.6} metalness={0.2} vertexColors={visualLevel === 3} /></mesh><mesh geometry={OBSTACLE_GLOW_GEOS[visualLevel as keyof typeof OBSTACLE_GLOW_GEOS]}><meshBasicMaterial color={colors.obstacleGlow} wireframe transparent opacity={0.3} /></mesh></group>)}
                 {data.type === ObjectType.ALIEN && (<group><mesh castShadow geometry={SQUID_BODY_GEO} position={[0, -0.2, 0]} rotation={[Math.PI, 0, 0]}><meshStandardMaterial color={data.color} emissive={data.color} emissiveIntensity={0.5} roughness={0.5} metalness={0.8} /></mesh><mesh position={[0.3, 0.3, 0.3]} geometry={SQUID_EYE_GEO}><meshBasicMaterial color="#ffff00" /></mesh><mesh position={[-0.3, 0.3, 0.3]} geometry={SQUID_EYE_GEO}><meshBasicMaterial color="#ffff00" /></mesh></group>)}
                 {data.type === ObjectType.MISSILE && (<mesh geometry={INK_BLAST_CORE_GEO}><meshStandardMaterial color="#110011" emissive="#330033" emissiveIntensity={2} transparent opacity={0.8} /></mesh>)}
                 {data.type === ObjectType.GEM && (<mesh castShadow geometry={GEM_GEOS[visualLevel as keyof typeof GEM_GEOS]} rotation={visualLevel === 2 ? [Math.PI/2,0,0] : [0,0,0]}><meshStandardMaterial color={colors.gem} roughness={0.1} metalness={0.2} emissive={colors.gemEmissive} emissiveIntensity={0.2} /></mesh>)}
