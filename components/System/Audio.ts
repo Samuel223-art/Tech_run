@@ -150,6 +150,49 @@ export class AudioController {
     noise.start(t);
     noise.stop(t + 0.3);
   }
+
+  playShatter() {
+    if (!this.ctx || !this.masterGain) this.init();
+    if (!this.ctx || !this.masterGain) return;
+
+    const t = this.ctx.currentTime;
+    
+    // 1. White noise for "crash"
+    const bufferSize = this.ctx.sampleRate * 0.2;
+    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+        data[i] = Math.random() * 2 - 1;
+    }
+
+    const noise = this.ctx.createBufferSource();
+    noise.buffer = buffer;
+    
+    const noiseGain = this.ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.4, t);
+    noiseGain.gain.exponentialRampToValueAtTime(0.01, t + 0.2);
+    
+    noise.connect(noiseGain);
+    noiseGain.connect(this.masterGain);
+
+    // 2. High-pitched tone for "glass/ice"
+    const osc = this.ctx.createOscillator();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(2000, t);
+    osc.frequency.exponentialRampToValueAtTime(800, t + 0.15);
+
+    const oscGain = this.ctx.createGain();
+    oscGain.gain.setValueAtTime(0.3, t);
+    oscGain.gain.exponentialRampToValueAtTime(0.01, t + 0.15);
+
+    osc.connect(oscGain);
+    oscGain.connect(this.masterGain);
+
+    noise.start(t);
+    noise.stop(t + 0.2);
+    osc.start(t);
+    osc.stop(t + 0.15);
+  }
 }
 
 export const audio = new AudioController();

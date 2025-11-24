@@ -5,7 +5,7 @@
 
 
 import { create } from 'zustand';
-import { GameStatus, RUN_SPEED_BASE } from './types';
+import { GameStatus, LEVEL_TARGETS, RUN_SPEED_BASE } from './types';
 
 interface GameState {
   status: GameStatus;
@@ -49,8 +49,7 @@ interface GameState {
   activateInvincibilityAbility: () => void;
 }
 
-const GEMINI_TARGET = ['G', 'E', 'M', 'I', 'N', 'I'];
-const MAX_LEVEL = 3;
+const MAX_LEVEL = 4;
 
 export const useStore = create<GameState>((set, get) => ({
   status: GameStatus.SPLASH,
@@ -146,15 +145,22 @@ export const useStore = create<GameState>((set, get) => ({
     
     if (!collectedLetters.includes(index)) {
       const newLetters = [...collectedLetters, index];
-      const speedIncrease = RUN_SPEED_BASE * 0.10;
-      const nextSpeed = speed + speedIncrease;
+      
+      let newSpeed = speed;
+      if (level === 1) {
+          const speedIncrease = RUN_SPEED_BASE * 0.10;
+          // Cap speed at 200% of base speed in level 1
+          newSpeed = Math.min(speed + speedIncrease, RUN_SPEED_BASE * 2);
+      }
+      // No speed increase for letters in levels 2 & 3
 
       set({ 
         collectedLetters: newLetters,
-        speed: nextSpeed
+        speed: newSpeed,
       });
 
-      if (newLetters.length === GEMINI_TARGET.length) {
+      const currentTarget = LEVEL_TARGETS[level - 1];
+      if (newLetters.length === currentTarget.length) {
         if (level < MAX_LEVEL) {
             get().advanceLevel();
         } else {
@@ -171,22 +177,31 @@ export const useStore = create<GameState>((set, get) => ({
   collectPowerUp: (type) => {
     if (type === 'INVINCIBILITY') {
         set({ isInvincible: true });
-        setTimeout(() => set({ isInvincible: false }), 8000); // 8 seconds
+        setTimeout(() => set({ isInvincible: false }), 15000); // 15 seconds
     } else if (type === 'SCORE_MULTIPLIER') {
         set({ isScoreMultiplierActive: true, scoreMultiplier: 2 });
-        setTimeout(() => set({ isScoreMultiplierActive: false, scoreMultiplier: 1 }), 10000); // 10 seconds
+        setTimeout(() => set({ isScoreMultiplierActive: false, scoreMultiplier: 1 }), 15000); // 15 seconds
     }
   },
 
   advanceLevel: () => {
-      const { level, laneCount, speed } = get();
+      const { level } = get();
       const nextLevel = level + 1;
-      const speedIncrease = RUN_SPEED_BASE * 0.40;
-      const newSpeed = speed + speedIncrease;
+      
+      let newSpeed;
+      if (nextLevel === 2) {
+          newSpeed = RUN_SPEED_BASE * 1.5; // 150%
+      } else if (nextLevel === 3) {
+          newSpeed = RUN_SPEED_BASE * 2.0; // 200%
+      } else if (nextLevel === 4) {
+          newSpeed = RUN_SPEED_BASE * 2.5; // 250%
+      } else {
+          // Fallback for potential future levels
+          newSpeed = get().speed + RUN_SPEED_BASE * 0.40;
+      }
 
       set(state => ({
           level: nextLevel,
-          laneCount: Math.min(laneCount + 2, 9),
           status: GameStatus.PLAYING,
           previousStatus: state.status,
           speed: newSpeed,
@@ -238,7 +253,7 @@ export const useStore = create<GameState>((set, get) => ({
       const { hasInvincibilityAbility, isInvincible } = get();
       if (hasInvincibilityAbility && !isInvincible) {
           set({ isInvincible: true });
-          setTimeout(() => set({ isInvincible: false }), 5000);
+          setTimeout(() => set({ isInvincible: false }), 15000);
       }
   },
 

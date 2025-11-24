@@ -10,7 +10,7 @@ import * as THREE from 'three';
 import { Text3D, Center, Float } from '@react-three/drei';
 import { v4 as uuidv4 } from 'uuid';
 import { useStore } from '../../store';
-import { GameObject, ObjectType, LANE_WIDTH, SPAWN_DISTANCE, REMOVE_DISTANCE, GameStatus, GEMINI_COLORS } from '../../types';
+import { GameObject, ObjectType, LANE_WIDTH, SPAWN_DISTANCE, REMOVE_DISTANCE, GameStatus, LEVEL_TARGETS, LEVEL_COLORS } from '../../types';
 import { audio } from '../System/Audio';
 
 // Helper to create a multi-colored beach ball geometry
@@ -44,20 +44,26 @@ const BEACH_BALL_GEO = createBeachBallGeo();
 
 // --- Level Themed Geometries ---
 const OBSTACLE_GEOS = {
-    1: new THREE.IcosahedronGeometry(0.8, 1),      // Sea Urchin
-    2: new THREE.ConeGeometry(0.8, 2.5, 6),      // Crystal Stalagmite
-    3: BEACH_BALL_GEO,     // Beach Ball
+    1: BEACH_BALL_GEO,     // Beach Ball (Coastal)
+    2: new THREE.IcosahedronGeometry(0.8, 1),      // Sea Urchin (Volcanic)
+    3: new THREE.TetrahedronGeometry(1.2, 0),      // Ice Crystal (Snow)
+    4: new THREE.IcosahedronGeometry(0.7, 0),      // Sea Mine (Underwater)
 };
 const OBSTACLE_GLOW_GEOS = {
-    1: new THREE.IcosahedronGeometry(0.82, 1),
-    2: new THREE.ConeGeometry(0.82, 2.52, 6),
-    3: new THREE.SphereGeometry(0.82, 16, 8),
+    1: new THREE.SphereGeometry(0.82, 16, 8),
+    2: new THREE.IcosahedronGeometry(0.82, 1),
+    3: new THREE.TetrahedronGeometry(1.22, 0),
+    4: new THREE.IcosahedronGeometry(0.72, 0),
 };
 const GEM_GEOS = {
-    1: new THREE.SphereGeometry(0.3, 16, 16),     // Pearl
-    2: new THREE.CylinderGeometry(0.3, 0.3, 0.1, 12), // Ancient Coin
-    3: new THREE.OctahedronGeometry(0.35, 0),   // Crystal
+    1: new THREE.OctahedronGeometry(0.35, 0),      // Coastal Gem
+    2: new THREE.SphereGeometry(0.3, 16, 16),        // Volcanic Gem
+    3: new THREE.IcosahedronGeometry(0.4, 0),    // Snow Gem
+    4: new THREE.SphereGeometry(0.35, 16, 16),       // Pearl (Underwater)
 };
+const SNOWBALL_GEO = new THREE.SphereGeometry(LANE_WIDTH * 0.8, 20, 16);
+const SNOWBALL_GLOW_GEO = new THREE.SphereGeometry(LANE_WIDTH * 0.8 + 0.02, 20, 16);
+
 
 // --- Shared Geometries ---
 const SQUID_BODY_GEO = new THREE.ConeGeometry(0.5, 1.2, 8);
@@ -152,7 +158,7 @@ const getRandomLane = (laneCount: number) => {
 };
 
 export const LevelManager: React.FC = () => {
-  const { status, speed, collectGem, collectLetter, collectPowerUp, collectedLetters, laneCount, setDistance, openShop, level, visualLevel } = useStore();
+  const { status, speed, collectGem, collectLetter, collectPowerUp, collectedLetters, laneCount, setDistance, openShop, level, visualLevel, isInvincible } = useStore();
   const objectsRef = useRef<GameObject[]>([]);
   const [renderTrigger, setRenderTrigger] = useState(0);
   const prevStatus = useRef(status);
@@ -212,7 +218,7 @@ export const LevelManager: React.FC = () => {
         if (obj.type === ObjectType.ALIEN && obj.active && !obj.hasFired) {
              if (obj.position[2] > -90) {
                  obj.hasFired = true;
-                 newSpawns.push({ id: uuidv4(), type: ObjectType.MISSILE, position: [obj.position[0], 1.0, obj.position[2] + 2], active: true, color: '#111111' });
+                 newSpawns.push({ id: uuidv4(), type: ObjectType.MISSILE, position: [obj.position[0], 1.0, obj.position[2] + 2], active: true, color: '#ffffff' });
                  hasChanges = true;
                  window.dispatchEvent(new CustomEvent('particle-burst', { detail: { position: obj.position, color: '#aa00ff' } }));
              }
@@ -228,15 +234,22 @@ export const LevelManager: React.FC = () => {
                      openShop(); obj.active = false; hasChanges = true; keep = false; 
                 }
             } else if (inZZone) {
-                if (Math.abs(obj.position[0] - playerPos.x) < 0.9) {
+                const collisionThreshold = obj.isSnowball ? LANE_WIDTH : 0.9;
+                if (Math.abs(obj.position[0] - playerPos.x) < collisionThreshold) {
                      const isDamageSource = obj.type === ObjectType.OBSTACLE || obj.type === ObjectType.ALIEN || obj.type === ObjectType.MISSILE;
                      if (isDamageSource) {
                          const playerBottom = playerPos.y; const playerTop = playerPos.y + 1.8;
                          let objBottom = obj.position[1] - 0.5, objTop = obj.position[1] + 0.5;
-                         if (obj.type === ObjectType.OBSTACLE) { objBottom = 0; objTop = 1.6; }
+                         if (obj.type === ObjectType.OBSTACLE) { objBottom = 0; objTop = obj.isSnowball ? LANE_WIDTH * 1.6 : 1.6; }
                          if ((playerBottom < objTop) && (playerTop > objBottom)) { 
-                             window.dispatchEvent(new Event('player-hit')); obj.active = false; hasChanges = true;
-                             if (obj.type === ObjectType.MISSILE) window.dispatchEvent(new CustomEvent('particle-burst', { detail: { position: obj.position, color: '#330033', burstAmount: 60 } }));
+                             if (isInvincible && obj.type === ObjectType.OBSTACLE) {
+                                 audio.playShatter();
+                                 window.dispatchEvent(new CustomEvent('particle-burst', { detail: { position: obj.position, color: '#a5f3fc', burstAmount: 100 }}));
+                                 obj.active = false; hasChanges = true;
+                             } else {
+                                 window.dispatchEvent(new Event('player-hit')); obj.active = false; hasChanges = true;
+                                 if (obj.type === ObjectType.MISSILE) window.dispatchEvent(new CustomEvent('particle-burst', { detail: { position: obj.position, color: '#ffffff', burstAmount: 60 } }));
+                             }
                          }
                      } else {
                          if (Math.abs(obj.position[1] - playerPos.y) < 2.5) {
@@ -270,27 +283,43 @@ export const LevelManager: React.FC = () => {
          const isLetterDue = distanceTraveled.current >= nextLetterDistance.current;
 
          if (isLetterDue) {
-             const lane = getRandomLane(laneCount); const target = ['G','E','M','I','N','I'];
-             const availableIndices = target.map((_, i) => i).filter(i => !collectedLetters.includes(i));
+             const lane = getRandomLane(laneCount);
+             const currentTarget = LEVEL_TARGETS[level - 1];
+             const currentColors = LEVEL_COLORS[level - 1];
+             const availableIndices = currentTarget.map((_, i) => i).filter(i => !collectedLetters.includes(i));
              if (availableIndices.length > 0) {
                  const chosenIndex = availableIndices[Math.floor(Math.random() * availableIndices.length)];
-                 keptObjects.push({ id: uuidv4(), type: ObjectType.LETTER, position: [lane * LANE_WIDTH, 1.0, spawnZ], active: true, color: GEMINI_COLORS[chosenIndex], value: target[chosenIndex], targetIndex: chosenIndex });
+                 keptObjects.push({ id: uuidv4(), type: ObjectType.LETTER, position: [lane * LANE_WIDTH, 1.0, spawnZ], active: true, color: currentColors[chosenIndex], value: currentTarget[chosenIndex], targetIndex: chosenIndex });
                  nextLetterDistance.current += getLetterInterval(level); hasChanges = true;
              }
          } else if (Math.random() > 0.1) {
             const spawnLane = getRandomLane(laneCount); const p = Math.random();
-            if (p < 0.05) {
+            if (p < 0.08) {
                 const isInvincibility = Math.random() > 0.5;
                 keptObjects.push({ id: uuidv4(), active: true, position: [spawnLane * LANE_WIDTH, 1.2, spawnZ], type: isInvincibility ? ObjectType.POWERUP_INVINCIBILITY : ObjectType.POWERUP_SCORE_MULTIPLIER, powerUpType: isInvincibility ? 'INVINCIBILITY' : 'SCORE_MULTIPLIER', color: isInvincibility ? '#ffd700' : '#00ff88'});
-            } else if (p < 0.80) {
+            } else if (p < (visualLevel === 3 ? 0.95 : 0.80)) {
                 const spawnSquid = visualLevel === 2 && Math.random() < 0.2;
                 if (spawnSquid) {
                     keptObjects.push({ id: uuidv4(), type: ObjectType.ALIEN, position: [spawnLane * LANE_WIDTH, 2.5, spawnZ], active: true, color: '#55ccaa', hasFired: false });
                 } else {
-                    const availableLanes = Array.from({length: laneCount}, (_, i) => i - Math.floor(laneCount/2)).sort(() => .5 - Math.random());
-                    let countToSpawn = Math.random() > 0.8 ? 3 : Math.random() > 0.5 ? 2 : 1;
-                    for (let i = 0; i < Math.min(countToSpawn, laneCount); i++) {
-                        keptObjects.push({ id: uuidv4(), type: ObjectType.OBSTACLE, position: [availableLanes[i] * LANE_WIDTH, 0.8, spawnZ], active: true, color: '#ff4499' });
+                     if (visualLevel === 3 && Math.random() < 0.25) { // 25% chance for a big snowball
+                        const maxLane = Math.floor(laneCount / 2);
+                        const startLane = Math.floor(Math.random() * (laneCount - 1)) - maxLane;
+                        const snowballX = (startLane + 0.5) * LANE_WIDTH;
+                        keptObjects.push({ id: uuidv4(), type: ObjectType.OBSTACLE, position: [snowballX, LANE_WIDTH * 0.8, spawnZ], active: true, color: '#ff4499', isSnowball: true });
+                    } else {
+                        const availableLanes = Array.from({length: laneCount}, (_, i) => i - Math.floor(laneCount/2)).sort(() => .5 - Math.random());
+                        let countToSpawn;
+                        if (visualLevel === 3 || visualLevel === 4) {
+                            countToSpawn = Math.random() > 0.6 ? 4 : Math.random() > 0.2 ? 3 : 2;
+                        } else {
+                            countToSpawn = Math.random() > 0.8 ? 3 : Math.random() > 0.5 ? 2 : 1;
+                        }
+                        
+                        for (let i = 0; i < Math.min(countToSpawn, laneCount); i++) {
+                            const yPos = visualLevel === 4 ? (0.8 + Math.random() * 2) : 0.8; // Floating mines
+                            keptObjects.push({ id: uuidv4(), type: ObjectType.OBSTACLE, position: [availableLanes[i] * LANE_WIDTH, yPos, spawnZ], active: true, color: '#ff4499' });
+                        }
                     }
                 }
             } else {
@@ -347,28 +376,49 @@ const GameEntity: React.FC<{ data: GameObject, visualLevel: number }> = React.me
         if (data.type === ObjectType.SHOP_PORTAL) return null;
         if (data.type === ObjectType.ALIEN) return SHADOW_SQUID_GEO;
         if (data.type === ObjectType.MISSILE) return SHADOW_INK_BLAST_GEO;
+        if (data.isSnowball) return new THREE.CircleGeometry(LANE_WIDTH * 0.8, 32);
         return SHADOW_DEFAULT_GEO; 
-    }, [data.type, data.powerUpType]);
+    }, [data.type, data.powerUpType, data.isSnowball]);
     
     const colors = useMemo(() => ({
-        obstacle: { 1: '#331122', 2: '#442266', 3: '#ffffff' }[visualLevel],
-        obstacleGlow: { 1: '#ff4499', 2: '#ee82ee', 3: '#00ffff' }[visualLevel],
-        gem: { 1: '#ffffff', 2: '#ffd700', 3: '#ff88ff' }[visualLevel],
-        gemEmissive: { 1: '#dddddd', 2: '#ff88ff', 3: '#ff00ff' }[visualLevel],
+        obstacle: { 1: '#ffffff', 2: '#331122', 3: '#60a5fa', 4: '#333333' }[visualLevel],
+        obstacleGlow: { 1: '#00ffff', 2: '#ff4499', 3: '#93c5fd', 4: '#ff3333' }[visualLevel],
+        gem: { 1: '#ff88ff', 2: '#ffffff', 3: '#ffffff', 4: '#e5f5f5' }[visualLevel],
+        gemEmissive: { 1: '#ff00ff', 2: '#dddddd', 3: '#a5f3fc', 4: '#00ffff' }[visualLevel],
     }), [visualLevel]);
 
     return (
         <group ref={groupRef}>
             {shadowGeo && <mesh ref={shadowRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.03, 0]} geometry={shadowGeo}><meshBasicMaterial color="#000000" opacity={0.3} transparent /></mesh>}
-            <group ref={visualRef} position={[0, data.position[1], 0]}>
+            <group ref={visualRef} position={[0, data.position[1], 0]} rotation={data.rotation || [0, 0, 0]}>
                 {data.type === ObjectType.SHOP_PORTAL && (<><Center position={[0, 5, 0.6]}><Text3D font={FONT_URL} size={1.2} height={0.2}>ABYSSAL FORGE<meshBasicMaterial color="#ffff00" /></Text3D></Center><mesh rotation={[-Math.PI/2, 0, 0]} scale={[laneCount * LANE_WIDTH * 1.5, laneCount * LANE_WIDTH * 1.5, 1]} geometry={WHIRLPOOL_GEO}><shaderMaterial ref={whirlpoolMatRef} transparent uniforms={{ uTime: { value: 0 }, uColor: { value: new THREE.Color('#00ffff') } }} vertexShader={`varying vec2 vUv; uniform float uTime; void main() { vUv = uv; vec2 c = vec2(0.5, 0.5); float d = distance(vUv, c); float a = atan(vUv.y - c.y, vUv.x - c.x); float r = d * (1.0 + 0.2 * sin(d * 10.0 - uTime * 2.0)); vec3 pos = position; pos.z += sin(d * 10.0 + uTime) * 0.2; gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0); }`} fragmentShader={`varying vec2 vUv; uniform float uTime; uniform vec3 uColor; void main() { vec2 c = vec2(0.5, 0.5); float d = distance(vUv, c); float a = atan(vUv.y - c.y, vUv.x - c.x) / (2.0 * 3.14159); float spiral = mod(a + d * 5.0 - uTime * 0.5, 0.2); float alpha = smoothstep(0.5, 0.0, d) * (1.0 - smoothstep(0.05, 0.0, spiral)); gl_FragColor = vec4(uColor, alpha); }`} /></mesh></>)}
-                {data.type === ObjectType.OBSTACLE && (<group><mesh geometry={OBSTACLE_GEOS[visualLevel as keyof typeof OBSTACLE_GEOS]} castShadow><meshStandardMaterial color={colors.obstacle} roughness={0.6} metalness={0.2} vertexColors={visualLevel === 3} /></mesh><mesh geometry={OBSTACLE_GLOW_GEOS[visualLevel as keyof typeof OBSTACLE_GLOW_GEOS]}><meshBasicMaterial color={colors.obstacleGlow} wireframe transparent opacity={0.3} /></mesh></group>)}
+                {data.type === ObjectType.OBSTACLE && (<group><mesh geometry={data.isSnowball ? SNOWBALL_GEO : OBSTACLE_GEOS[visualLevel as keyof typeof OBSTACLE_GEOS]} castShadow><meshStandardMaterial color={colors.obstacle} roughness={data.isSnowball ? 0.9 : 0.6} metalness={0.2} vertexColors={!data.isSnowball && visualLevel === 1} /></mesh><mesh geometry={data.isSnowball ? SNOWBALL_GLOW_GEO : OBSTACLE_GLOW_GEOS[visualLevel as keyof typeof OBSTACLE_GLOW_GEOS]}><meshBasicMaterial color={colors.obstacleGlow} wireframe transparent opacity={0.3} /></mesh></group>)}
                 {data.type === ObjectType.ALIEN && (<group><mesh castShadow geometry={SQUID_BODY_GEO} position={[0, -0.2, 0]} rotation={[Math.PI, 0, 0]}><meshStandardMaterial color={data.color} emissive={data.color} emissiveIntensity={0.5} roughness={0.5} metalness={0.8} /></mesh><mesh position={[0.3, 0.3, 0.3]} geometry={SQUID_EYE_GEO}><meshBasicMaterial color="#ffff00" /></mesh><mesh position={[-0.3, 0.3, 0.3]} geometry={SQUID_EYE_GEO}><meshBasicMaterial color="#ffff00" /></mesh></group>)}
-                {data.type === ObjectType.MISSILE && (<mesh geometry={INK_BLAST_CORE_GEO}><meshStandardMaterial color="#110011" emissive="#330033" emissiveIntensity={2} transparent opacity={0.8} /></mesh>)}
+                {data.type === ObjectType.MISSILE && (<mesh geometry={INK_BLAST_CORE_GEO}><meshStandardMaterial color={data.color} emissive={data.color} emissiveIntensity={5} toneMapped={false} /></mesh>)}
                 {data.type === ObjectType.GEM && (<mesh castShadow geometry={GEM_GEOS[visualLevel as keyof typeof GEM_GEOS]} rotation={visualLevel === 2 ? [Math.PI/2,0,0] : [0,0,0]}><meshStandardMaterial color={colors.gem} roughness={0.1} metalness={0.2} emissive={colors.gemEmissive} emissiveIntensity={0.2} /></mesh>)}
                 {data.type === ObjectType.LETTER && (<group scale={[1.5, 1.5, 1.5]}><Center><Text3D font={FONT_URL} size={0.8} height={0.5} bevelEnabled bevelThickness={0.02} bevelSize={0.02} bevelSegments={5}>{data.value}<meshStandardMaterial color={data.color} emissive={data.color} emissiveIntensity={1.5} /></Text3D></Center></group>)}
-                {data.type === ObjectType.POWERUP_INVINCIBILITY && (<Float><mesh geometry={POWERUP_SHIELD_GEO}><meshStandardMaterial color={data.color} emissive={data.color} emissiveIntensity={2} metalness={1} roughness={0.1} /></mesh></Float>)}
-                {data.type === ObjectType.POWERUP_SCORE_MULTIPLIER && (<Float><mesh geometry={POWERUP_MULTIPLIER_GEO}><meshStandardMaterial color={data.color} emissive={data.color} emissiveIntensity={2} metalness={1} roughness={0.1} /></mesh></Float>)}
+                {data.type === ObjectType.POWERUP_INVINCIBILITY && (
+                    <Float>
+                        <mesh geometry={POWERUP_SHIELD_GEO}><meshStandardMaterial color={data.color} emissive={data.color} emissiveIntensity={2} metalness={1} roughness={0.1} /></mesh>
+                        <Center position={[0, 1.0, 0]}>
+                            <Text3D font={FONT_URL} size={0.3} height={0.05}>
+                                SHIELD
+                                <meshBasicMaterial color={data.color} toneMapped={false} />
+                            </Text3D>
+                        </Center>
+                    </Float>
+                )}
+                {data.type === ObjectType.POWERUP_SCORE_MULTIPLIER && (
+                    <Float>
+                        <mesh geometry={POWERUP_MULTIPLIER_GEO}><meshStandardMaterial color={data.color} emissive={data.color} emissiveIntensity={2} metalness={1} roughness={0.1} /></mesh>
+                        <Center position={[0, 0.8, 0]}>
+                            <Text3D font={FONT_URL} size={0.5} height={0.05}>
+                                2X
+                                <meshBasicMaterial color={data.color} toneMapped={false} />
+                            </Text3D>
+                        </Center>
+                    </Float>
+                )}
             </group>
         </group>
     );

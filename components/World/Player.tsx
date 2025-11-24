@@ -4,7 +4,7 @@
 */
 
 
-import React, { useRef, useEffect, useMemo } from 'react';
+import React, { useRef, useEffect, useMemo, useCallback } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useStore } from '../../store';
@@ -38,7 +38,7 @@ export const Player: React.FC = () => {
   const rightLegRef = useRef<THREE.Group>(null);
   const headRef = useRef<THREE.Group>(null);
 
-  const { status, laneCount, takeDamage, hasDoubleJump, activateInvincibilityAbility, isInvincible, visualLevel } = useStore();
+  const { status, laneCount, takeDamage, hasDoubleJump, activateInvincibilityAbility, isInvincible } = useStore();
   
   const [lane, setLane] = React.useState(0);
   const targetX = useRef(0);
@@ -57,15 +57,8 @@ export const Player: React.FC = () => {
 
   // Memoized Materials
   const { armorMaterial, jointMaterial, glowMaterial, shadowMaterial } = useMemo(() => {
-      const armorColor = isInvincible ? '#ffd700' : '#445566';
-      
-      const themeGlow = {
-          1: '#ff6a00', // Volcanic Realm Orange
-          2: '#ff44ff', // Crystal Cave Magenta
-          3: '#ff8800', // Coastal Run Sunset
-      }[visualLevel] || '#00aaff';
-      
-      const glowColor = isInvincible ? '#ffffff' : themeGlow;
+      const armorColor = isInvincible ? '#ffd700' : '#e0e0e0';
+      const glowColor = isInvincible ? '#ffffff' : '#00aaff';
       
       return {
           armorMaterial: new THREE.MeshStandardMaterial({ color: armorColor, roughness: 0.3, metalness: 0.8 }),
@@ -73,7 +66,7 @@ export const Player: React.FC = () => {
           glowMaterial: new THREE.MeshBasicMaterial({ color: glowColor }),
           shadowMaterial: new THREE.MeshBasicMaterial({ color: '#000000', opacity: 0.3, transparent: true })
       };
-  }, [isInvincible, visualLevel]);
+  }, [isInvincible]);
 
   // --- Reset State on Game Start ---
   useEffect(() => {
@@ -96,7 +89,7 @@ export const Player: React.FC = () => {
   }, [laneCount, lane]);
 
   // --- Controls (Keyboard & Touch) ---
-  const triggerJump = () => {
+  const triggerJump = useCallback(() => {
     const maxJumps = hasDoubleJump ? 2 : 1;
 
     if (!isJumping.current) {
@@ -110,7 +103,7 @@ export const Player: React.FC = () => {
         velocityY.current = JUMP_FORCE;
         spinRotation.current = 0;
     }
-  };
+  }, [hasDoubleJump]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -127,14 +120,19 @@ export const Player: React.FC = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [status, laneCount, hasDoubleJump, activateInvincibilityAbility]);
+  }, [status, laneCount, triggerJump, activateInvincibilityAbility]);
 
+  // Touch handlers are split into two effects to prevent bugs from re-registering listeners unnecessarily.
   useEffect(() => {
     const handleTouchStart = (e: TouchEvent) => {
       touchStartX.current = e.touches[0].clientX;
       touchStartY.current = e.touches[0].clientY;
     };
+    window.addEventListener('touchstart', handleTouchStart);
+    return () => window.removeEventListener('touchstart', handleTouchStart);
+  }, []); // Register this once
 
+  useEffect(() => {
     const handleTouchEnd = (e: TouchEvent) => {
         if (status !== GameStatus.PLAYING) return;
         const deltaX = e.changedTouches[0].clientX - touchStartX.current;
@@ -151,13 +149,9 @@ export const Player: React.FC = () => {
         }
     };
 
-    window.addEventListener('touchstart', handleTouchStart);
     window.addEventListener('touchend', handleTouchEnd);
-    return () => {
-        window.removeEventListener('touchstart', handleTouchStart);
-        window.removeEventListener('touchend', handleTouchEnd);
-    };
-  }, [status, laneCount, hasDoubleJump, activateInvincibilityAbility]);
+    return () => window.removeEventListener('touchend', handleTouchEnd);
+  }, [status, laneCount, triggerJump, activateInvincibilityAbility]);
 
   // --- Animation Loop ---
   useFrame((state, delta) => {
@@ -199,14 +193,14 @@ export const Player: React.FC = () => {
         if (rightArmRef.current) rightArmRef.current.rotation.x = Math.sin(time + Math.PI) * 0.7;
         if (leftLegRef.current) leftLegRef.current.rotation.x = Math.sin(time + Math.PI) * 1.0;
         if (rightLegRef.current) rightLegRef.current.rotation.x = Math.sin(time) * 1.0;
-        if (bodyRef.current) bodyRef.current.position.y = 1.1 + Math.abs(Math.sin(time)) * 0.1;
+        if (bodyRef.current) bodyRef.current.position.y = 1.1 + Math.abs(Math.sin(time)) * 0.15;
     } else {
         const jumpPoseSpeed = delta * 10;
         if (leftArmRef.current) leftArmRef.current.rotation.x = THREE.MathUtils.lerp(leftArmRef.current.rotation.x, -2.5, jumpPoseSpeed);
         if (rightArmRef.current) rightArmRef.current.rotation.x = THREE.MathUtils.lerp(rightArmRef.current.rotation.x, -2.5, jumpPoseSpeed);
         if (leftLegRef.current) leftLegRef.current.rotation.x = THREE.MathUtils.lerp(leftLegRef.current.rotation.x, 0.5, jumpPoseSpeed);
         if (rightLegRef.current) rightLegRef.current.rotation.x = THREE.MathUtils.lerp(rightLegRef.current.rotation.x, -0.5, jumpPoseSpeed);
-        if (bodyRef.current && jumpsPerformed.current !== 2) bodyRef.current.position.y = 1.1; 
+        if (bodyRef.current && jumpsPerformed.current !== 2) bodyRef.current.position.y = 1.1 + Math.sin(state.clock.elapsedTime * 8) * 0.2; 
     }
 
     // 4. Dynamic Shadow

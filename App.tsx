@@ -16,36 +16,20 @@ import { useStore } from './store';
 
 // Dynamic Camera Controller
 const CameraController = () => {
-  const { camera, size } = useThree();
-  const { laneCount } = useStore();
+  const { camera } = useThree();
   
   useFrame((state, delta) => {
-    // Determine if screen is narrow (mobile portrait)
-    const aspect = size.width / size.height;
-    const isMobile = aspect < 1.2; // Threshold for "mobile-like" narrowness or square-ish displays
-
-    // Calculate expansion factors
-    // Mobile requires backing up significantly more because vertical FOV is fixed in Three.js,
-    // meaning horizontal view shrinks as aspect ratio drops.
-    // We use more aggressive multipliers for mobile to keep outer lanes in frame.
-    const heightFactor = isMobile ? 2.0 : 0.5;
-    const distFactor = isMobile ? 4.5 : 1.0;
-
-    // Base (3 lanes): y=5.5, z=8
-    // Calculate target based on how many extra lanes we have relative to the start
-    const extraLanes = Math.max(0, laneCount - 3);
-
-    const targetY = 5.5 + (extraLanes * heightFactor);
-    const targetZ = 8.0 + (extraLanes * distFactor);
+    // New fixed camera position, 70% of the original base values
+    const targetY = 3.85; // 5.5 * 0.7
+    const targetZ = 5.6;  // 8.0 * 0.7
 
     const targetPos = new THREE.Vector3(0, targetY, targetZ);
     
     // Smoothly interpolate camera position
     camera.position.lerp(targetPos, delta * 2.0);
     
-    // Look further down the track to see the end of lanes
-    // Adjust look target slightly based on height to maintain angle
-    camera.lookAt(0, -2, -30); 
+    // Look further down the track from the new lower angle
+    camera.lookAt(0, -1, -30); 
   });
   
   return null;
@@ -75,8 +59,8 @@ function App() {
         shadows
         dpr={[1, 1.5]} 
         gl={{ antialias: false, stencil: false, depth: true, powerPreference: "high-performance" }}
-        // Initial camera, matches the controller base
-        camera={{ position: [0, 5.5, 8], fov: 60 }}
+        // Initial camera, matches the new fixed controller base
+        camera={{ position: [0, 3.85, 5.6], fov: 60 }}
       >
         <CameraController />
         <Suspense fallback={null}>

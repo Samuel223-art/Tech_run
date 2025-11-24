@@ -7,7 +7,7 @@
 import React, { useState, useEffect } from 'react';
 import { Heart, Zap, Trophy, MapPin, Diamond, Anchor, ArrowUpCircle, Shield, Activity, PlusCircle, Play, Settings, X, User, CheckSquare, Package, Star } from 'lucide-react';
 import { useStore } from '../../store';
-import { GameStatus, GEMINI_COLORS, ShopItem, RUN_SPEED_BASE } from '../../types';
+import { GameStatus, LEVEL_COLORS, LEVEL_TARGETS, ShopItem, RUN_SPEED_BASE } from '../../types';
 import { audio } from '../System/Audio';
 
 // Available Shop Items
@@ -55,7 +55,7 @@ const SplashScreen: React.FC = () => {
         return () => clearTimeout(timer);
     }, [showMenu]);
 
-    const title = "GEMINI";
+    const title = "NEON";
 
     return (
         <div className="absolute inset-0 bg-[#020014] flex flex-col items-center justify-center z-[100] pointer-events-auto animate-in fade-in duration-1000">
@@ -65,8 +65,8 @@ const SplashScreen: React.FC = () => {
                         <span 
                             key={index}
                             style={{ 
-                                color: GEMINI_COLORS[index],
-                                textShadow: `0 0 15px ${GEMINI_COLORS[index]}`,
+                                color: ['#00ffff', '#ff00ff', '#ffff00', '#00ff00'][index],
+                                textShadow: `0 0 15px ${['#00ffff', '#ff00ff', '#ffff00', '#00ff00'][index]}`,
                                 animation: `fadeInUp 0.5s ${index * 0.1}s both`
                             }}
                         >
@@ -263,15 +263,47 @@ const SettingsModal: React.FC = () => {
 };
 
 const THEME_COLORS = {
-    1: { main: 'text-cyan-400', shadow: 'drop-shadow-[0_0_10px_#00ffff]', speed: 'text-cyan-500' },
-    2: { main: 'text-fuchsia-400', shadow: 'drop-shadow-[0_0_10px_#ff00ff]', speed: 'text-fuchsia-500' },
-    3: { main: 'text-orange-400', shadow: 'drop-shadow-[0_0_10px_#ffaa00]', speed: 'text-orange-500' },
+    1: { main: 'text-cyan-400', shadow: 'drop-shadow-[0_0_10px_#00ffff]', speed: 'text-cyan-500' }, // Coastal
+    2: { main: 'text-orange-400', shadow: 'drop-shadow-[0_0_10px_#ffaa00]', speed: 'text-orange-500' }, // Volcanic
+    3: { main: 'text-blue-300', shadow: 'drop-shadow-[0_0_10px_#93c5fd]', speed: 'text-blue-400' }, // Snow
+    4: { main: 'text-cyan-300', shadow: 'drop-shadow-[0_0_10px_#00aaff]', speed: 'text-cyan-400' }, // Underwater
 };
 
 export const HUD: React.FC = () => {
   const { score, lives, maxLives, collectedLetters, status, level, visualLevel, restartGame, startGame, gemsCollected, distance, isInvincible, isScoreMultiplierActive, speed, setStatus } = useStore();
-  const target = ['G', 'E', 'M', 'I', 'N', 'I'];
+  const [displayedScore, setDisplayedScore] = useState(score);
+  const target = LEVEL_TARGETS[level - 1] || [];
+  const letterColors = LEVEL_COLORS[level - 1] || [];
   const theme = THEME_COLORS[visualLevel as keyof typeof THEME_COLORS] || THEME_COLORS[1];
+  
+  useEffect(() => {
+    // For the live counter effect during gameplay
+    if (status !== GameStatus.PLAYING) {
+        // When not playing, snap the score to the true value
+        setDisplayedScore(score);
+        return;
+    }
+
+    const interval = setInterval(() => {
+        setDisplayedScore(prev => {
+            if (prev === score) {
+                clearInterval(interval);
+                return score;
+            }
+            const diff = score - prev;
+            const step = Math.max(1, Math.ceil(diff * 0.1));
+
+            // Snap to final value if close
+            if (diff < step) {
+                return score;
+            }
+            return prev + step;
+        });
+    }, 40); // Update roughly 25 times per second
+
+    return () => clearInterval(interval);
+  }, [score, status]);
+
 
   // Common container style
   const containerClass = "absolute inset-0 pointer-events-none flex flex-col justify-between p-4 md:p-8 z-50";
@@ -317,7 +349,7 @@ export const HUD: React.FC = () => {
                 <div className="grid grid-cols-1 gap-3 md:gap-4 text-center mb-8 w-full max-w-md">
                     <div className="bg-gray-900/80 p-3 md:p-4 rounded-lg border border-gray-700 flex items-center justify-between">
                         <div className="flex items-center text-yellow-400 text-sm md:text-base"><Trophy className="mr-2 w-4 h-4 md:w-5 md:h-5"/> ZONE</div>
-                        <div className="text-xl md:text-2xl font-bold font-mono">{level} / 3</div>
+                        <div className="text-xl md:text-2xl font-bold font-mono">{level} / 4</div>
                     </div>
                     <div className="bg-gray-900/80 p-3 md:p-4 rounded-lg border border-gray-700 flex items-center justify-between">
                         <div className="flex items-center text-cyan-400 text-sm md:text-base"><Diamond className="mr-2 w-4 h-4 md:w-5 md:h-5"/> GEMS COLLECTED</div>
@@ -394,7 +426,7 @@ export const HUD: React.FC = () => {
         {/* Top Bar */}
         <div className="flex justify-between items-start w-full">
             <div className={`text-3xl md:text-5xl font-bold ${theme.main} ${theme.shadow} font-cyber`}>
-                {score.toLocaleString()}
+                {displayedScore.toLocaleString()}
             </div>
             
             <div className="flex items-center space-x-2 md:space-x-4">
@@ -406,15 +438,12 @@ export const HUD: React.FC = () => {
                         />
                     ))}
                 </div>
-                 <button onClick={() => setStatus(GameStatus.PAUSED)} className="pointer-events-auto p-2 bg-black/30 rounded-full hover:bg-white/20 transition-colors backdrop-blur-sm" aria-label="Open settings menu">
-                    <Settings className={`w-5 h-5 md:w-6 md:h-6 ${theme.main}`} />
-                </button>
             </div>
         </div>
         
         {/* Level Indicator - Moved to Top Center aligned with Score/Hearts */}
         <div className="absolute top-5 left-1/2 transform -translate-x-1/2 text-sm md:text-lg text-purple-300 font-bold tracking-wider font-mono bg-black/50 px-3 py-1 rounded-full border border-purple-500/30 backdrop-blur-sm z-50">
-            ZONE {level} <span className="text-gray-500 text-xs md:text-sm">/ 3</span>
+            ZONE {level} <span className="text-gray-500 text-xs md:text-sm">/ 4</span>
         </div>
 
         {/* Active Powerup Indicators */}
@@ -431,11 +460,11 @@ export const HUD: React.FC = () => {
             )}
         </div>
 
-        {/* Gemini Collection Status - Just below Top Bar */}
-        <div className="absolute top-16 md:top-24 left-1/2 transform -translate-x-1/2 flex space-x-2 md:space-x-3">
+        {/* Letter Collection Status */}
+        <div className="absolute top-16 md:top-24 left-1/2 transform -translate-x-1/2 w-full px-4 flex flex-wrap justify-center gap-1 md:gap-2">
             {target.map((char, idx) => {
                 const isCollected = collectedLetters.includes(idx);
-                const color = GEMINI_COLORS[idx];
+                const color = letterColors[idx];
 
                 return (
                     <div 
