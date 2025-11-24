@@ -31,7 +31,7 @@ interface GameState {
 
   // Actions
   showMenu: () => void;
-  startGame: () => void;
+  startGame: (startLevel?: number) => void;
   restartGame: () => void;
   takeDamage: () => void;
   addScore: (amount: number) => void;
@@ -74,23 +74,36 @@ export const useStore = create<GameState>((set, get) => ({
 
   showMenu: () => set(state => ({ status: GameStatus.MENU, previousStatus: state.status })),
 
-  startGame: () => set({ 
-    status: GameStatus.PLAYING, 
-    previousStatus: GameStatus.MENU,
-    score: 0, 
-    lives: 3, 
-    maxLives: 3,
-    speed: RUN_SPEED_BASE,
-    collectedLetters: [],
-    level: 1,
-    visualLevel: 1,
-    laneCount: 3,
-    gemsCollected: 0,
-    distance: 0,
-    hasDoubleJump: false,
-    hasInvincibilityAbility: false,
-    isInvincible: false
-  }),
+  startGame: (startLevel = 1) => {
+    let newSpeed;
+    if (startLevel === 2) {
+        newSpeed = RUN_SPEED_BASE * 1.5;
+    } else if (startLevel === 3) {
+        newSpeed = RUN_SPEED_BASE * 2.0;
+    } else if (startLevel === 4) {
+        newSpeed = RUN_SPEED_BASE * 2.5;
+    } else {
+        newSpeed = RUN_SPEED_BASE;
+    }
+    
+    set({ 
+      status: GameStatus.PLAYING, 
+      previousStatus: GameStatus.MENU,
+      score: 0, 
+      lives: 3, 
+      maxLives: 3,
+      speed: newSpeed,
+      collectedLetters: [],
+      level: startLevel,
+      visualLevel: startLevel,
+      laneCount: 3,
+      gemsCollected: 0,
+      distance: 0,
+      hasDoubleJump: false,
+      hasInvincibilityAbility: false,
+      isInvincible: false
+    });
+  },
 
   restartGame: () => set(state => ({ 
     status: GameStatus.PLAYING,

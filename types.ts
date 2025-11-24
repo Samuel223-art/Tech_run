@@ -36,7 +36,8 @@ export interface GameObject {
   points?: number; // Score value for gems
   hasFired?: boolean; // For Aliens
   powerUpType?: 'INVINCIBILITY' | 'SCORE_MULTIPLIER';
-  isSnowball?: boolean; // For wide obstacles
+  isSnowball?: boolean; // For wide obstacles in Level 3
+  isRollingLog?: boolean; // For wide obstacles in Level 4
   rotation?: [number, number, number]; // For objects like fallen pawns
 }
 
@@ -52,7 +53,16 @@ export const LEVEL_TARGETS = [
     ['B', 'E', 'A', 'C', 'H'],
     ['H', 'O', 'T', 'L', 'A', 'V', 'A'],
     ['F', 'R', 'O', 'S', 'T', 'B', 'I', 'T', 'E'],
-    ['D', 'E', 'E', 'P', 'D', 'I', 'V', 'E'],
+    ['W', 'I', 'L', 'D', 'W', 'O', 'O', 'D'],
+];
+
+// Level 1: Beach (Coastal colors)
+const BEACH_COLORS = [
+    '#00bfff', // DeepSkyBlue
+    '#ffff00', // Yellow
+    '#f0e68c', // Khaki
+    '#add8e6', // LightBlue
+    '#87ceeb', // SkyBlue
 ];
 
 // Level 2: Hot Lava (Fiery colors)
@@ -66,47 +76,36 @@ const HOTLAVA_COLORS = [
     '#ff7f50', // Coral
 ];
 
-// Level 3: Snow (Icy/cool colors)
-const SNOW_COLORS = [
-    '#e0f2fe', // sky-100
-    '#a5f3fc', // cyan-200
-    '#67e8f9', // cyan-300
-    '#22d3ee', // cyan-400
-    '#06b6d4', // cyan-500
-    '#0891b2', // cyan-600
-    '#0e7490', // cyan-700
-    '#155e75', // cyan-800
-    '#ffffff', // white
-    '#e0e7ff', // indigo-100
-    '#c7d2fe', // indigo-200
-];
-
-// Level 4: Underwater (Deep sea colors)
-const UNDERWATER_COLORS = [
-    '#00ffff', // cyan
-    '#7fffd4', // aquamarine
-    '#40e0d0', // turquoise
-    '#afeeee', // paleturquoise
-    '#00ced1', // darkturquoise
-    '#5f9ea0', // cadetblue
-    '#20b2aa', // lightseagreen
-    '#66cdaa', // mediumaquamarine
-];
-
-// Level 1: Beach (Coastal colors)
-const BEACH_COLORS = [
-    '#00bfff', // DeepSkyBlue
-    '#ffff00', // Yellow
-    '#f0e68c', // Khaki
+// Level 3: Snowy Wonderland (Icy colors)
+const ICY_COLORS = [
+    '#ffffff', // White
+    '#afeeee', // PaleTurquoise
+    '#b0e0e6', // PowderBlue
     '#add8e6', // LightBlue
-    '#87ceeb', // SkyBlue
+    '#87cefa', // LightSkyBlue
+    '#00bfff', // DeepSkyBlue
+    '#1e90ff', // DodgerBlue
+    '#6495ed', // CornflowerBlue
+    '#f0f8ff', // AliceBlue
+];
+
+// Level 4: Wildwood (Earthy colors)
+const FOREST_COLORS = [
+    '#556b2f', // DarkOliveGreen
+    '#6b8e23', // OliveDrab
+    '#8fbc8f', // DarkSeaGreen
+    '#228b22', // ForestGreen
+    '#d2b48c', // Tan
+    '#cd853f', // Peru
+    '#a0522d', // Sienna
+    '#8b4513', // SaddleBrown
 ];
 
 export const LEVEL_COLORS = [
     BEACH_COLORS,
     HOTLAVA_COLORS,
-    SNOW_COLORS,
-    UNDERWATER_COLORS,
+    ICY_COLORS,
+    FOREST_COLORS,
 ];
 
 export interface ShopItem {

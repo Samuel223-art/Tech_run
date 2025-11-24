@@ -44,26 +44,27 @@ const BEACH_BALL_GEO = createBeachBallGeo();
 
 // --- Level Themed Geometries ---
 const OBSTACLE_GEOS = {
-    1: BEACH_BALL_GEO,     // Beach Ball (Coastal)
-    2: new THREE.IcosahedronGeometry(0.8, 1),      // Sea Urchin (Volcanic)
-    3: new THREE.TetrahedronGeometry(1.2, 0),      // Ice Crystal (Snow)
-    4: new THREE.IcosahedronGeometry(0.7, 0),      // Sea Mine (Underwater)
+    1: BEACH_BALL_GEO,
+    2: new THREE.IcosahedronGeometry(0.8, 1),
+    3: new THREE.TetrahedronGeometry(1.2, 0),
+    4: new THREE.TorusKnotGeometry(0.6, 0.2, 32, 4), // Gnarled root
 };
 const OBSTACLE_GLOW_GEOS = {
     1: new THREE.SphereGeometry(0.82, 16, 8),
     2: new THREE.IcosahedronGeometry(0.82, 1),
     3: new THREE.TetrahedronGeometry(1.22, 0),
-    4: new THREE.IcosahedronGeometry(0.72, 0),
+    4: new THREE.TorusKnotGeometry(0.62, 0.2, 32, 4),
 };
 const GEM_GEOS = {
-    1: new THREE.OctahedronGeometry(0.35, 0),      // Coastal Gem
-    2: new THREE.SphereGeometry(0.3, 16, 16),        // Volcanic Gem
-    3: new THREE.IcosahedronGeometry(0.4, 0),    // Snow Gem
-    4: new THREE.SphereGeometry(0.35, 16, 16),       // Pearl (Underwater)
+    1: new THREE.OctahedronGeometry(0.35, 0),
+    2: new THREE.SphereGeometry(0.3, 16, 16),
+    3: new THREE.IcosahedronGeometry(0.4, 0),
+    4: new THREE.DodecahedronGeometry(0.35, 0), // Acorn/Nut
 };
 const SNOWBALL_GEO = new THREE.SphereGeometry(LANE_WIDTH * 0.8, 20, 16);
 const SNOWBALL_GLOW_GEO = new THREE.SphereGeometry(LANE_WIDTH * 0.8 + 0.02, 20, 16);
-
+const LOG_GEO = new THREE.CylinderGeometry(LANE_WIDTH * 0.7, LANE_WIDTH * 0.7, LANE_WIDTH * 2, 16);
+const LOG_GLOW_GEO = new THREE.CylinderGeometry(LANE_WIDTH * 0.7 + 0.02, LANE_WIDTH * 0.7 + 0.02, LANE_WIDTH * 2, 16);
 
 // --- Shared Geometries ---
 const SQUID_BODY_GEO = new THREE.ConeGeometry(0.5, 1.2, 8);
@@ -234,13 +235,13 @@ export const LevelManager: React.FC = () => {
                      openShop(); obj.active = false; hasChanges = true; keep = false; 
                 }
             } else if (inZZone) {
-                const collisionThreshold = obj.isSnowball ? LANE_WIDTH : 0.9;
+                const collisionThreshold = (obj.isSnowball || obj.isRollingLog) ? LANE_WIDTH : 0.9;
                 if (Math.abs(obj.position[0] - playerPos.x) < collisionThreshold) {
                      const isDamageSource = obj.type === ObjectType.OBSTACLE || obj.type === ObjectType.ALIEN || obj.type === ObjectType.MISSILE;
                      if (isDamageSource) {
                          const playerBottom = playerPos.y; const playerTop = playerPos.y + 1.8;
                          let objBottom = obj.position[1] - 0.5, objTop = obj.position[1] + 0.5;
-                         if (obj.type === ObjectType.OBSTACLE) { objBottom = 0; objTop = obj.isSnowball ? LANE_WIDTH * 1.6 : 1.6; }
+                         if (obj.type === ObjectType.OBSTACLE) { objBottom = 0; objTop = (obj.isSnowball || obj.isRollingLog) ? LANE_WIDTH * 1.6 : 1.6; }
                          if ((playerBottom < objTop) && (playerTop > objBottom)) { 
                              if (isInvincible && obj.type === ObjectType.OBSTACLE) {
                                  audio.playShatter();
@@ -297,7 +298,7 @@ export const LevelManager: React.FC = () => {
             if (p < 0.08) {
                 const isInvincibility = Math.random() > 0.5;
                 keptObjects.push({ id: uuidv4(), active: true, position: [spawnLane * LANE_WIDTH, 1.2, spawnZ], type: isInvincibility ? ObjectType.POWERUP_INVINCIBILITY : ObjectType.POWERUP_SCORE_MULTIPLIER, powerUpType: isInvincibility ? 'INVINCIBILITY' : 'SCORE_MULTIPLIER', color: isInvincibility ? '#ffd700' : '#00ff88'});
-            } else if (p < (visualLevel === 3 ? 0.95 : 0.80)) {
+            } else if (p < (visualLevel === 3 || visualLevel === 4 ? 0.95 : 0.80)) {
                 const spawnSquid = visualLevel === 2 && Math.random() < 0.2;
                 if (spawnSquid) {
                     keptObjects.push({ id: uuidv4(), type: ObjectType.ALIEN, position: [spawnLane * LANE_WIDTH, 2.5, spawnZ], active: true, color: '#55ccaa', hasFired: false });
@@ -307,6 +308,11 @@ export const LevelManager: React.FC = () => {
                         const startLane = Math.floor(Math.random() * (laneCount - 1)) - maxLane;
                         const snowballX = (startLane + 0.5) * LANE_WIDTH;
                         keptObjects.push({ id: uuidv4(), type: ObjectType.OBSTACLE, position: [snowballX, LANE_WIDTH * 0.8, spawnZ], active: true, color: '#ff4499', isSnowball: true });
+                    } else if (visualLevel === 4 && Math.random() < 0.25) { // 25% chance for a rolling log
+                        const maxLane = Math.floor(laneCount / 2);
+                        const startLane = Math.floor(Math.random() * (laneCount - 1)) - maxLane;
+                        const logX = (startLane + 0.5) * LANE_WIDTH;
+                        keptObjects.push({ id: uuidv4(), type: ObjectType.OBSTACLE, position: [logX, LANE_WIDTH * 0.7, spawnZ], active: true, color: '#8b4513', isRollingLog: true, rotation: [0, 0, Math.PI/2] });
                     } else {
                         const availableLanes = Array.from({length: laneCount}, (_, i) => i - Math.floor(laneCount/2)).sort(() => .5 - Math.random());
                         let countToSpawn;
@@ -317,7 +323,7 @@ export const LevelManager: React.FC = () => {
                         }
                         
                         for (let i = 0; i < Math.min(countToSpawn, laneCount); i++) {
-                            const yPos = visualLevel === 4 ? (0.8 + Math.random() * 2) : 0.8; // Floating mines
+                            const yPos = 0.8;
                             keptObjects.push({ id: uuidv4(), type: ObjectType.OBSTACLE, position: [availableLanes[i] * LANE_WIDTH, yPos, spawnZ], active: true, color: '#ff4499' });
                         }
                     }
@@ -352,7 +358,7 @@ const GameEntity: React.FC<{ data: GameObject, visualLevel: number }> = React.me
     
     useFrame((state, delta) => {
         if (groupRef.current) groupRef.current.position.set(data.position[0], 0, data.position[2]);
-        if (whirlpoolMatRef.current) whirlpoolMatRef.current.uniforms.uTime.value = state.clock.elapsedTime;
+        if (whirlpoolMatRef.current && whirlpoolMatRef.current.uniforms.uTime) whirlpoolMatRef.current.uniforms.uTime.value = state.clock.elapsedTime;
 
         if (visualRef.current) {
             const baseHeight = data.position[1];
@@ -376,23 +382,35 @@ const GameEntity: React.FC<{ data: GameObject, visualLevel: number }> = React.me
         if (data.type === ObjectType.SHOP_PORTAL) return null;
         if (data.type === ObjectType.ALIEN) return SHADOW_SQUID_GEO;
         if (data.type === ObjectType.MISSILE) return SHADOW_INK_BLAST_GEO;
-        if (data.isSnowball) return new THREE.CircleGeometry(LANE_WIDTH * 0.8, 32);
+        if (data.isSnowball || data.isRollingLog) return new THREE.CircleGeometry(LANE_WIDTH * 0.8, 32);
         return SHADOW_DEFAULT_GEO; 
-    }, [data.type, data.powerUpType, data.isSnowball]);
+    }, [data.type, data.powerUpType, data.isSnowball, data.isRollingLog]);
     
     const colors = useMemo(() => ({
-        obstacle: { 1: '#ffffff', 2: '#331122', 3: '#60a5fa', 4: '#333333' }[visualLevel],
-        obstacleGlow: { 1: '#00ffff', 2: '#ff4499', 3: '#93c5fd', 4: '#ff3333' }[visualLevel],
-        gem: { 1: '#ff88ff', 2: '#ffffff', 3: '#ffffff', 4: '#e5f5f5' }[visualLevel],
-        gemEmissive: { 1: '#ff00ff', 2: '#dddddd', 3: '#a5f3fc', 4: '#00ffff' }[visualLevel],
+        obstacle: { 1: '#ffffff', 2: '#331122', 3: '#60a5fa', 4: '#6e4a2e' }[visualLevel],
+        obstacleGlow: { 1: '#00ffff', 2: '#ff4499', 3: '#93c5fd', 4: '#8fbc8f' }[visualLevel],
+        gem: { 1: '#ff88ff', 2: '#ffffff', 3: '#ffffff', 4: '#daa520' }[visualLevel],
+        gemEmissive: { 1: '#ff00ff', 2: '#dddddd', 3: '#a5f3fc', 4: '#f0e68c' }[visualLevel],
     }), [visualLevel]);
+
+    const obstacleGeo = useMemo(() => {
+        if (data.isSnowball) return SNOWBALL_GEO;
+        if (data.isRollingLog) return LOG_GEO;
+        return OBSTACLE_GEOS[visualLevel as keyof typeof OBSTACLE_GEOS];
+    }, [data.isSnowball, data.isRollingLog, visualLevel]);
+    
+    const obstacleGlowGeo = useMemo(() => {
+        if (data.isSnowball) return SNOWBALL_GLOW_GEO;
+        if (data.isRollingLog) return LOG_GLOW_GEO;
+        return OBSTACLE_GLOW_GEOS[visualLevel as keyof typeof OBSTACLE_GLOW_GEOS];
+    }, [data.isSnowball, data.isRollingLog, visualLevel]);
 
     return (
         <group ref={groupRef}>
             {shadowGeo && <mesh ref={shadowRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.03, 0]} geometry={shadowGeo}><meshBasicMaterial color="#000000" opacity={0.3} transparent /></mesh>}
             <group ref={visualRef} position={[0, data.position[1], 0]} rotation={data.rotation || [0, 0, 0]}>
                 {data.type === ObjectType.SHOP_PORTAL && (<><Center position={[0, 5, 0.6]}><Text3D font={FONT_URL} size={1.2} height={0.2}>ABYSSAL FORGE<meshBasicMaterial color="#ffff00" /></Text3D></Center><mesh rotation={[-Math.PI/2, 0, 0]} scale={[laneCount * LANE_WIDTH * 1.5, laneCount * LANE_WIDTH * 1.5, 1]} geometry={WHIRLPOOL_GEO}><shaderMaterial ref={whirlpoolMatRef} transparent uniforms={{ uTime: { value: 0 }, uColor: { value: new THREE.Color('#00ffff') } }} vertexShader={`varying vec2 vUv; uniform float uTime; void main() { vUv = uv; vec2 c = vec2(0.5, 0.5); float d = distance(vUv, c); float a = atan(vUv.y - c.y, vUv.x - c.x); float r = d * (1.0 + 0.2 * sin(d * 10.0 - uTime * 2.0)); vec3 pos = position; pos.z += sin(d * 10.0 + uTime) * 0.2; gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0); }`} fragmentShader={`varying vec2 vUv; uniform float uTime; uniform vec3 uColor; void main() { vec2 c = vec2(0.5, 0.5); float d = distance(vUv, c); float a = atan(vUv.y - c.y, vUv.x - c.x) / (2.0 * 3.14159); float spiral = mod(a + d * 5.0 - uTime * 0.5, 0.2); float alpha = smoothstep(0.5, 0.0, d) * (1.0 - smoothstep(0.05, 0.0, spiral)); gl_FragColor = vec4(uColor, alpha); }`} /></mesh></>)}
-                {data.type === ObjectType.OBSTACLE && (<group><mesh geometry={data.isSnowball ? SNOWBALL_GEO : OBSTACLE_GEOS[visualLevel as keyof typeof OBSTACLE_GEOS]} castShadow><meshStandardMaterial color={colors.obstacle} roughness={data.isSnowball ? 0.9 : 0.6} metalness={0.2} vertexColors={!data.isSnowball && visualLevel === 1} /></mesh><mesh geometry={data.isSnowball ? SNOWBALL_GLOW_GEO : OBSTACLE_GLOW_GEOS[visualLevel as keyof typeof OBSTACLE_GLOW_GEOS]}><meshBasicMaterial color={colors.obstacleGlow} wireframe transparent opacity={0.3} /></mesh></group>)}
+                {data.type === ObjectType.OBSTACLE && (<group><mesh geometry={obstacleGeo} castShadow><meshStandardMaterial color={colors.obstacle} roughness={(data.isSnowball || data.isRollingLog) ? 0.9 : 0.6} metalness={0.2} vertexColors={!data.isSnowball && !data.isRollingLog && visualLevel === 1} /></mesh><mesh geometry={obstacleGlowGeo}><meshBasicMaterial color={colors.obstacleGlow} wireframe transparent opacity={0.3} /></mesh></group>)}
                 {data.type === ObjectType.ALIEN && (<group><mesh castShadow geometry={SQUID_BODY_GEO} position={[0, -0.2, 0]} rotation={[Math.PI, 0, 0]}><meshStandardMaterial color={data.color} emissive={data.color} emissiveIntensity={0.5} roughness={0.5} metalness={0.8} /></mesh><mesh position={[0.3, 0.3, 0.3]} geometry={SQUID_EYE_GEO}><meshBasicMaterial color="#ffff00" /></mesh><mesh position={[-0.3, 0.3, 0.3]} geometry={SQUID_EYE_GEO}><meshBasicMaterial color="#ffff00" /></mesh></group>)}
                 {data.type === ObjectType.MISSILE && (<mesh geometry={INK_BLAST_CORE_GEO}><meshStandardMaterial color={data.color} emissive={data.color} emissiveIntensity={5} toneMapped={false} /></mesh>)}
                 {data.type === ObjectType.GEM && (<mesh castShadow geometry={GEM_GEOS[visualLevel as keyof typeof GEM_GEOS]} rotation={visualLevel === 2 ? [Math.PI/2,0,0] : [0,0,0]}><meshStandardMaterial color={colors.gem} roughness={0.1} metalness={0.2} emissive={colors.gemEmissive} emissiveIntensity={0.2} /></mesh>)}
