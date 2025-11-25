@@ -1,3 +1,4 @@
+
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -5,41 +6,62 @@
 
 
 import React, { useState, useEffect } from 'react';
-import { Heart, Zap, Trophy, MapPin, Diamond, ArrowUpCircle, Shield, Activity, PlusCircle, Play, Settings, X, User, CheckSquare, Package, Star, Waves, Flame, Leaf } from 'lucide-react';
+import { Heart, Zap, Trophy, MapPin, Diamond, TreePine, ArrowUpCircle, Shield, Activity, PlusCircle, Play, X, User, CheckSquare, Package, Star, Waves, Flame, Snowflake, Crown, Timer, Feather, Pause } from 'lucide-react';
 import { useStore } from '../../store';
 import { GameStatus, LEVEL_COLORS, LEVEL_TARGETS, ShopItem, RUN_SPEED_BASE } from '../../types';
 import { audio } from '../System/Audio';
 
-// Available Shop Items
+// New Shop Items based on request
 const SHOP_ITEMS: ShopItem[] = [
     {
-        id: 'DOUBLE_JUMP',
-        name: 'HYDRO JETS',
-        description: 'Propel again in mid-water. Essential for high obstacles.',
+        id: 'POWER_EXT',
+        name: 'CHRONOS CELL',
+        description: 'Adds 5 seconds to all power-up durations.',
         cost: 1000,
-        icon: ArrowUpCircle,
+        icon: Timer,
+        type: 'UPGRADE'
+    },
+    {
+        id: 'HULL_EXPANSION',
+        name: 'HULL EXPANSION',
+        description: 'Permanently adds +1 Max Hull Integrity.',
+        cost: 1200,
+        icon: Activity,
+        type: 'UPGRADE'
+    },
+    {
+        id: 'REFILL_LIFE',
+        name: 'NANO-REPAIR',
+        description: 'Fully restores Hull Integrity instantly.',
+        cost: 2000,
+        icon: PlusCircle,
+        type: 'CONSUMABLE'
+    },
+    {
+        id: 'REACTIVE_SHIELD',
+        name: 'REACTIVE BARRIER',
+        description: 'After damage, shields hold for 6 seconds.',
+        cost: 1500,
+        icon: Shield,
+        type: 'UPGRADE',
         oneTime: true
     },
     {
-        id: 'MAX_LIFE',
-        name: 'HULL UPGRADE',
-        description: 'Permanently adds a hull integrity slot and repairs one.',
-        cost: 1500,
-        icon: Activity
+        id: 'HYDRO_JETS',
+        name: 'HYDRO JETS',
+        description: 'Propel again in mid-air (Double Jump).',
+        cost: 800,
+        icon: ArrowUpCircle,
+        type: 'ABILITY',
+        oneTime: true
     },
     {
-        id: 'HEAL',
-        name: 'REPAIR DRONE',
-        description: 'Restores 1 Hull Integrity point instantly.',
-        cost: 1000,
-        icon: PlusCircle
-    },
-    {
-        id: 'IMMORTAL',
-        name: 'ENERGY SHIELD',
-        description: 'Unlock Ability: Press Space/Tap for a 5s shield.',
-        cost: 3000,
-        icon: Shield,
+        id: 'GRAV_DAMPENERS',
+        name: 'GRAV-DAMPENERS',
+        description: 'Double tap jump to suspend gravity for 0.8s.',
+        cost: 3100,
+        icon: Feather,
+        type: 'ABILITY',
         oneTime: true
     }
 ];
@@ -55,7 +77,8 @@ const SplashScreen: React.FC = () => {
         return () => clearTimeout(timer);
     }, [showMenu]);
 
-    const title = "NEON";
+    const title = "ZONES";
+    const colors = ['#00ffff', '#ff00ff', '#ffff00', '#00ff00', '#ff4400'];
 
     return (
         <div className="absolute inset-0 bg-[#020014] flex flex-col items-center justify-center z-[100] pointer-events-auto animate-in fade-in duration-1000">
@@ -65,8 +88,8 @@ const SplashScreen: React.FC = () => {
                         <span 
                             key={index}
                             style={{ 
-                                color: ['#00ffff', '#ff00ff', '#ffff00', '#00ff00'][index],
-                                textShadow: `0 0 15px ${['#00ffff', '#ff00ff', '#ffff00', '#00ff00'][index]}`,
+                                color: colors[index % colors.length],
+                                textShadow: `0 0 15px ${colors[index % colors.length]}`,
                                 animation: `fadeInUp 0.5s ${index * 0.1}s both`
                             }}
                         >
@@ -81,11 +104,11 @@ const SplashScreen: React.FC = () => {
                         animation: `fadeInUp 0.5s 0.6s both`
                     }}
                 >
-                    DIVER
+                    RUNNER
                 </h2>
             </div>
             <div className="absolute bottom-10 text-cyan-400/50 text-sm font-mono tracking-widest animate-pulse">
-                PRESSURIZING...
+                LOADING ZONES...
             </div>
             {/* Inline style for keyframes to avoid needing a CSS file */}
             <style>
@@ -106,287 +129,432 @@ const SplashScreen: React.FC = () => {
     );
 };
 
+const PowerUpTimer: React.FC<{ icon: React.ElementType, color: string, expiry: number, totalDuration: number }> = ({ icon: Icon, color, expiry, totalDuration }) => {
+    const [progress, setProgress] = useState(1);
+    const radius = 22; // Slightly smaller radius to fit stroke within 64x64 without clipping
+    const center = 32;
+    const circumference = 2 * Math.PI * radius;
+
+    useEffect(() => {
+        let animationFrameId: number;
+        
+        const update = () => {
+            const now = Date.now();
+            const remaining = Math.max(0, expiry - now);
+            setProgress(remaining / totalDuration);
+            
+            if (remaining > 0) {
+                animationFrameId = requestAnimationFrame(update);
+            }
+        };
+        
+        update();
+        return () => cancelAnimationFrame(animationFrameId);
+    }, [expiry, totalDuration]);
+
+    if (Date.now() > expiry) return null;
+
+    const strokeDashoffset = circumference * (1 - progress);
+
+    return (
+        <div className="relative w-16 h-16 flex items-center justify-center">
+            {/* SVG Progress Bar */}
+            <svg className="absolute w-full h-full transform -rotate-90" viewBox="0 0 64 64">
+                {/* Background Track */}
+                <circle
+                    cx={center}
+                    cy={center}
+                    r={radius}
+                    stroke="rgba(0,0,0,0.5)"
+                    strokeWidth="6"
+                    fill="rgba(0,0,0,0.8)"
+                />
+                {/* Progress Value */}
+                <circle
+                    cx={center}
+                    cy={center}
+                    r={radius}
+                    stroke={color}
+                    strokeWidth="4"
+                    fill="none"
+                    strokeDasharray={circumference}
+                    strokeDashoffset={strokeDashoffset}
+                    strokeLinecap="round"
+                    className="transition-all duration-75 ease-linear"
+                />
+            </svg>
+            
+            {/* Centered Icon */}
+            <div className="relative z-10 flex items-center justify-center animate-pulse" style={{ color: color, filter: `drop-shadow(0 0 8px ${color})` }}>
+                <Icon size={28} strokeWidth={2.5} />
+            </div>
+        </div>
+    );
+};
+
 const ZONES = [
     { name: 'Coastal Run', icon: Waves, color: 'text-cyan-400' },
     { name: 'Volcanic Realm', icon: Flame, color: 'text-orange-400' },
-    { name: 'Snowy Wonderland', icon: Star, color: 'text-blue-300' },
-    { name: 'Wildwood', icon: Leaf, color: 'text-green-400' }
+    { name: 'Snowy Wonderland', icon: Snowflake, color: 'text-blue-300' },
+    { name: 'Enchanted Forest', icon: TreePine, color: 'text-green-400' },
+    { name: 'Royal Gambit', icon: Crown, color: 'text-yellow-100' },
+    { name: 'Crystal Caves', icon: Diamond, color: 'text-purple-400' }
 ];
 
-interface ZoneSelectorModalProps {
-    onSelectZone: (level: number) => void;
-    onClose: () => void;
-}
+const ShopScreen: React.FC = () => {
+    const { score, buyItem, closeShop, hasDoubleJump, hasHover, damageShieldDuration, lives, maxLives } = useStore();
+    
+    // Check if user already owns unique items
+    const isOwned = (id: string) => {
+        if (id === 'HYDRO_JETS') return hasDoubleJump;
+        if (id === 'GRAV_DAMPENERS') return hasHover;
+        if (id === 'REACTIVE_SHIELD') return damageShieldDuration > 2000;
+        return false;
+    };
 
-const ZoneSelectorModal: React.FC<ZoneSelectorModalProps> = ({ onSelectZone, onClose }) => {
+    // Check if consumable is relevant
+    const isRelevant = (id: string) => {
+        if (id === 'REFILL_LIFE') return lives < maxLives;
+        return true;
+    };
+
+    const getItemColor = (type: string) => {
+        switch(type) {
+            case 'ABILITY': return 'border-yellow-500/50 text-yellow-400 shadow-[0_0_15px_rgba(234,179,8,0.2)]';
+            case 'UPGRADE': return 'border-purple-500/50 text-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.2)]';
+            case 'CONSUMABLE': return 'border-green-500/50 text-green-400 shadow-[0_0_15px_rgba(34,197,94,0.2)]';
+            default: return 'border-gray-700 text-gray-400';
+        }
+    };
+
     return (
-        <div className="absolute inset-0 bg-black/90 z-[110] text-white pointer-events-auto animate-in fade-in-25 flex flex-col items-center justify-center font-cyber">
-            <button onClick={onClose} className="absolute top-6 right-6 text-gray-400 hover:text-white transition-colors">
-                <X size={32} />
-            </button>
-            <h2 className="text-4xl font-bold tracking-widest mb-10" style={{ textShadow: '0 0 10px #ffffff' }}>ZONE SELECT</h2>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
-                {ZONES.map((zone, index) => (
-                    <button 
-                        key={zone.name} 
-                        onClick={() => onSelectZone(index + 1)}
-                        className={`group flex flex-col items-center justify-center p-6 rounded-lg border-2 border-white/20 hover:border-white hover:bg-white/10 transition-all duration-300 w-40 h-40 ${zone.color}`}
-                    >
-                        <zone.icon size={48} className="mb-3 group-hover:scale-110 transition-transform" />
-                        <span className="text-lg font-bold text-white tracking-wider text-center">{zone.name}</span>
-                    </button>
-                ))}
-            </div>
+        <div className="absolute inset-0 bg-[#050510]/95 z-[100] text-white pointer-events-auto backdrop-blur-xl overflow-y-auto">
+             {/* Tech Grid Background Overlay */}
+             <div className="absolute inset-0 pointer-events-none opacity-20" 
+                  style={{ backgroundImage: 'linear-gradient(#4f46e5 1px, transparent 1px), linear-gradient(90deg, #4f46e5 1px, transparent 1px)', backgroundSize: '40px 40px' }} 
+             />
+
+             <div className="relative flex flex-col items-center min-h-full py-8 px-4 max-w-7xl mx-auto">
+                 {/* Header */}
+                 <div className="w-full flex justify-between items-center mb-8 border-b border-gray-700 pb-4">
+                     <div>
+                        <h2 className="text-3xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-500 font-cyber tracking-widest drop-shadow-[0_0_10px_rgba(0,255,255,0.5)]">
+                            ABYSSAL MARKETPLACE
+                        </h2>
+                        <p className="text-gray-400 font-mono text-sm tracking-wider mt-1">AUTHORIZED PERSONNEL ONLY // SYSTEM.FORGE.V2</p>
+                     </div>
+                     <div className="flex items-center bg-black/60 px-6 py-3 rounded-xl border border-yellow-500/30">
+                         <Diamond className="w-6 h-6 text-yellow-400 mr-3 animate-pulse" />
+                         <span className="text-2xl font-bold font-mono text-yellow-400">{score.toLocaleString()}</span>
+                         <span className="text-xs text-yellow-600 ml-2 font-bold tracking-widest">PEARLS</span>
+                     </div>
+                 </div>
+
+                 {/* Grid */}
+                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 w-full mb-8">
+                     {SHOP_ITEMS.map(item => {
+                         const Icon = item.icon;
+                         const owned = isOwned(item.id);
+                         const relevant = isRelevant(item.id);
+                         const canAfford = score >= item.cost;
+                         const locked = !relevant && !owned && item.type === 'CONSUMABLE';
+                         
+                         return (
+                             <div 
+                                key={item.id} 
+                                className={`relative bg-gray-900/80 border-2 rounded-xl p-6 flex flex-col transition-all duration-300 group hover:-translate-y-1 hover:bg-gray-800 ${getItemColor(item.type)}`}
+                             >
+                                 <div className="flex items-start justify-between mb-4">
+                                     <div className={`p-4 rounded-lg bg-black/50 ${owned ? 'opacity-50' : ''}`}>
+                                         <Icon className="w-8 h-8" />
+                                     </div>
+                                     <div className="text-xs font-bold px-2 py-1 rounded bg-black/50 font-mono opacity-70">
+                                         {item.type}
+                                     </div>
+                                 </div>
+                                 
+                                 <h3 className="text-xl font-bold mb-2 font-cyber tracking-wide">{item.name}</h3>
+                                 <p className="text-gray-400 text-sm mb-6 flex-grow min-h-[40px] leading-relaxed">
+                                    {item.description}
+                                 </p>
+                                 
+                                 {owned ? (
+                                    <button disabled className="w-full py-3 bg-gray-800 text-gray-500 font-bold rounded cursor-not-allowed border border-gray-700 font-mono tracking-widest">
+                                        // ACQUIRED
+                                    </button>
+                                 ) : locked ? (
+                                    <button disabled className="w-full py-3 bg-gray-800 text-gray-500 font-bold rounded cursor-not-allowed border border-gray-700 font-mono tracking-widest">
+                                        // FULL INTEGRITY
+                                    </button>
+                                 ) : (
+                                     <button 
+                                        onClick={() => buyItem(item.id, item.cost)}
+                                        disabled={!canAfford}
+                                        className={`w-full py-3 font-bold rounded font-mono tracking-widest transition-all duration-200 flex justify-between items-center px-6
+                                            ${canAfford 
+                                                ? 'bg-gradient-to-r from-blue-600 to-cyan-600 text-white hover:brightness-110 shadow-lg hover:shadow-cyan-500/25' 
+                                                : 'bg-gray-800 text-gray-500 cursor-not-allowed border border-gray-700'
+                                            }`}
+                                     >
+                                         <span>PURCHASE</span>
+                                         <span>{item.cost}</span>
+                                     </button>
+                                 )}
+                             </div>
+                         );
+                     })}
+                 </div>
+
+                 {/* Footer Button */}
+                 <button 
+                    onClick={closeShop}
+                    className="group relative px-12 py-4 bg-transparent border-2 border-white/20 text-white font-bold text-xl rounded-none hover:border-cyan-400 hover:text-cyan-400 transition-all duration-300 font-cyber tracking-[0.2em] overflow-hidden"
+                 >
+                     <span className="relative z-10 flex items-center">
+                        RESUME RUN <Play className="ml-3 w-5 h-5 fill-current" />
+                     </span>
+                     <div className="absolute inset-0 bg-cyan-400/10 transform -skew-x-12 translate-x-full group-hover:translate-x-0 transition-transform duration-300" />
+                 </button>
+             </div>
         </div>
     );
 };
 
-// Main Menu
-const MainMenu: React.FC = () => {
-    const { startGame, highScore } = useStore();
-    const [isZoneSelectorOpen, setIsZoneSelectorOpen] = useState(false);
+const THEME_COLORS = {
+    1: { main: 'text-cyan-400', shadow: 'drop-shadow-[0_0_10px_#00ffff]', speed: 'text-cyan-500' }, // Coastal
+    2: { main: 'text-orange-400', shadow: 'drop-shadow-[0_0_10px_#ffaa00]', speed: 'text-orange-500' }, // Volcanic
+    3: { main: 'text-blue-300', shadow: 'drop-shadow-[0_0_10px_#93c5fd]', speed: 'text-blue-400' }, // Snow
+    4: { main: 'text-green-400', shadow: 'drop-shadow-[0_0_10px_#22c55e]', speed: 'text-green-500' }, // Forest
+    5: { main: 'text-yellow-100', shadow: 'drop-shadow-[0_0_10px_#ffffff]', speed: 'text-yellow-100' }, // Chess
+    6: { main: 'text-purple-400', shadow: 'drop-shadow-[0_0_10px_#a855f7]', speed: 'text-purple-500' }, // Crystal Caves
+};
 
-    const handleStart = () => {
-        audio.init();
-        startGame();
-    };
+export const HUD: React.FC = () => {
+  const { score, lives, maxLives, collectedLetters, status, level, visualLevel, restartGame, startGame, gemsCollected, distance, isInvincible, invincibilityExpiry, invincibilityTotalDuration, isScoreMultiplierActive, scoreMultiplierExpiry, scoreMultiplierTotalDuration, speed, setStatus, openShop } = useStore();
+  const [displayedScore, setDisplayedScore] = useState(score);
+  const target = LEVEL_TARGETS[level - 1] || [];
+  const letterColors = LEVEL_COLORS[level - 1] || [];
+  const theme = THEME_COLORS[visualLevel as keyof typeof THEME_COLORS] || THEME_COLORS[1];
+  
+  useEffect(() => {
+    // For the live counter effect during gameplay
+    if (status !== GameStatus.PLAYING) {
+        // When not playing, snap the score to the true value
+        setDisplayedScore(score);
+        return;
+    }
 
-    const selectZone = (level: number) => {
-        audio.init();
-        startGame(level);
-        setIsZoneSelectorOpen(false);
-    };
+    const interval = setInterval(() => {
+        setDisplayedScore(prev => {
+            if (prev === score) {
+                clearInterval(interval);
+                return score;
+            }
+            const diff = score - prev;
+            const step = Math.max(1, Math.ceil(diff * 0.1));
 
+            // Snap to final value if close
+            if (diff < step) {
+                return score;
+            }
+            return prev + step;
+        });
+    }, 40); // Update roughly 25 times per second
+
+    return () => clearInterval(interval);
+  }, [score, status]);
+
+
+  // Common container style
+  const containerClass = "absolute inset-0 pointer-events-none flex flex-col justify-between p-4 md:p-8 z-50";
+
+  if (status === GameStatus.SPLASH) {
+      return <SplashScreen />;
+  }
+  
+  if (status === GameStatus.SHOP) {
+      return <ShopScreen />;
+  }
+
+  if (status === GameStatus.MENU) {
     return (
-        <div className="absolute inset-0 bg-black/70 z-50 flex flex-col items-center justify-center text-white pointer-events-auto animate-in fade-in-25">
-            {isZoneSelectorOpen && <ZoneSelectorModal onSelectZone={selectZone} onClose={() => setIsZoneSelectorOpen(false)} />}
-            <div className="text-center font-cyber">
-                <h1 className="text-8xl font-black tracking-widest" style={{ color: '#00ffff', textShadow: '0 0 20px #00ffff' }}>
-                    NEON DIVER
+        <div className="absolute inset-0 z-[100] pointer-events-auto p-4 md:p-8">
+            <div className="absolute inset-x-0 bottom-20 flex justify-center items-center space-x-4">
+                <button
+                    onClick={() => { audio.init(); startGame(1); }}
+                    className="flex items-center px-8 md:px-10 py-3 md:py-4 bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold text-lg md:text-xl rounded-xl hover:scale-105 transition-all shadow-[0_0_20px_rgba(0,255,255,0.4)] animate-in fade-in slide-in-from-bottom-10 duration-500"
+                >
+                    START RUN <Play className="ml-2 w-5 h-5 fill-white" />
+                </button>
+            </div>
+        </div>
+    );
+  }
+
+  if (status === GameStatus.GAME_OVER) {
+      return (
+          <div className="absolute inset-0 bg-black/90 z-[100] text-white pointer-events-auto backdrop-blur-sm overflow-y-auto">
+              <div className="flex flex-col items-center justify-center min-h-full py-8 px-4">
+                <h1 className="text-4xl md:text-6xl font-black text-white mb-6 drop-shadow-[0_0_10px_rgba(255,0,0,0.8)] font-cyber text-center">PRESSURE CRITICAL</h1>
+                
+                <div className="grid grid-cols-1 gap-3 md:gap-4 text-center mb-8 w-full max-w-md">
+                    <div className="bg-gray-900/80 p-3 md:p-4 rounded-lg border border-gray-700 flex items-center justify-between">
+                        <div className="flex items-center text-yellow-400 text-sm md:text-base"><Trophy className="mr-2 w-4 h-4 md:w-5 md:h-5"/> ZONE</div>
+                        <div className="text-xl md:text-2xl font-bold font-mono">{level} / 6</div>
+                    </div>
+                    <div className="bg-gray-900/80 p-3 md:p-4 rounded-lg border border-gray-700 flex items-center justify-between">
+                        <div className="flex items-center text-cyan-400 text-sm md:text-base"><Diamond className="mr-2 w-4 h-4 md:w-5 md:h-5"/> GEMS COLLECTED</div>
+                        <div className="text-xl md:text-2xl font-bold font-mono">{gemsCollected}</div>
+                    </div>
+                    <div className="bg-gray-900/80 p-3 md:p-4 rounded-lg border border-gray-700 flex items-center justify-between">
+                        <div className="flex items-center text-purple-400 text-sm md:text-base"><MapPin className="mr-2 w-4 h-4 md:w-5 md:h-5"/> DEPTH</div>
+                        <div className="text-xl md:text-2xl font-bold font-mono">{Math.floor(distance)} m</div>
+                    </div>
+                     <div className="bg-gray-800/50 p-3 md:p-4 rounded-lg flex items-center justify-between mt-2">
+                        <div className="flex items-center text-white text-sm md:text-base">TOTAL SCORE</div>
+                        <div className="text-2xl md:text-3xl font-bold font-cyber text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-orange-500">{score.toLocaleString()}</div>
+                    </div>
+                </div>
+
+                <button 
+                  onClick={() => { audio.init(); restartGame(); }}
+                  className="px-8 md:px-10 py-3 md:py-4 bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold text-lg md:text-xl rounded hover:scale-105 transition-all shadow-[0_0_20px_rgba(0,255,255,0.4)]"
+                >
+                    RUN AGAIN
+                </button>
+              </div>
+          </div>
+      );
+  }
+
+  if (status === GameStatus.VICTORY) {
+    return (
+        <div className="absolute inset-0 bg-gradient-to-b from-blue-900/90 to-black/95 z-[100] text-white pointer-events-auto backdrop-blur-md overflow-y-auto">
+            <div className="flex flex-col items-center justify-center min-h-full py-8 px-4">
+                <Trophy className="w-16 h-16 md:w-24 md:h-24 text-yellow-400 mb-4 animate-bounce drop-shadow-[0_0_15px_rgba(255,215,0,0.6)]" />
+                <h1 className="text-3xl md:text-7xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 via-orange-500 to-pink-500 mb-2 drop-shadow-[0_0_20px_rgba(255,165,0,0.6)] font-cyber text-center leading-tight">
+                    SURFACE REACHED
                 </h1>
-                <p className="text-xl tracking-[0.2em] mt-2 text-cyan-300/80">A SUB-AQUATIC ENDLESS RUNNER</p>
-            </div>
-            <div className="mt-12 flex flex-col items-center gap-4">
-                 <button 
-                    onClick={handleStart} 
-                    className="group relative font-cyber text-2xl font-bold tracking-widest bg-cyan-500/80 hover:bg-cyan-400 text-black px-10 py-4 rounded-md transition-all duration-300 flex items-center gap-3"
-                    style={{ boxShadow: '0 0 20px #00ffff, inset 0 0 10px #ffffff' }}
-                >
-                    <Play className="group-hover:scale-125 transition-transform" />
-                    START DIVE
-                </button>
-                 <button 
-                    onClick={() => setIsZoneSelectorOpen(true)} 
-                    className="font-cyber text-lg tracking-widest text-cyan-300 hover:text-white hover:underline transition-colors"
-                >
-                    Zone Select
-                </button>
-            </div>
-            <div className="absolute bottom-8 font-mono text-cyan-400/60 text-lg">
-                <p>HIGH SCORE: {highScore}</p>
-                <p className="text-sm text-center mt-4">Move: Arrow Keys/Swipe | Jump: Up Arrow/Swipe Up | Ability: Space/Tap</p>
-            </div>
-        </div>
-    );
-};
+                <p className="text-cyan-300 text-sm md:text-2xl font-mono mb-8 tracking-widest text-center">
+                    YOU HAVE ESCAPED THE ABYSS
+                </p>
+                
+                <div className="grid grid-cols-1 gap-4 text-center mb-8 w-full max-w-md">
+                    <div className="bg-black/60 p-6 rounded-xl border border-yellow-500/30 shadow-[0_0_15px_rgba(255,215,0,0.1)]">
+                        <div className="text-xs md:text-sm text-gray-400 mb-1 tracking-wider">FINAL SCORE</div>
+                        <div className="text-3xl md:text-4xl font-bold font-cyber text-yellow-400">{score.toLocaleString()}</div>
+                    </div>
+                     <div className="grid grid-cols-2 gap-4">
+                        <div className="bg-black/60 p-4 rounded-lg border border-white/10">
+                            <div className="text-xs text-gray-400">GEMS</div>
+                            <div className="text-xl md:text-2xl font-bold text-cyan-400">{gemsCollected}</div>
+                        </div>
+                        <div className="bg-black/60 p-4 rounded-lg border border-white/10">
+                             <div className="text-xs text-gray-400">DEPTH</div>
+                            <div className="text-xl md:text-2xl font-bold text-purple-400">{Math.floor(distance)} m</div>
+                        </div>
+                     </div>
+                </div>
 
-// Game Over Screen
-const GameOverScreen: React.FC = () => {
-    const { score, distance, restartGame, showMenu } = useStore();
-    
-    return (
-        <div className="absolute inset-0 bg-black/80 z-50 flex flex-col items-center justify-center text-white pointer-events-auto animate-in fade-in-25">
-            <h1 className="font-cyber text-7xl font-black tracking-widest text-red-500" style={{ textShadow: '0 0 15px #ff0000' }}>
-                HULL BREACHED
-            </h1>
-            <div className="font-mono text-2xl mt-8 text-center text-gray-300">
-                <p>FINAL SCORE: <span className="text-white font-bold">{score}</span></p>
-                <p>DISTANCE: <span className="text-white font-bold">{distance}m</span></p>
-            </div>
-            <div className="mt-10 flex gap-6">
                 <button 
-                    onClick={restartGame}
-                    className="font-cyber text-xl font-bold tracking-widest bg-cyan-500 hover:bg-cyan-400 text-black px-8 py-3 rounded-md transition-colors"
-                >
-                    RETRY
-                </button>
-                <button 
-                    onClick={showMenu}
-                    className="font-cyber text-xl font-bold tracking-widest bg-gray-600 hover:bg-gray-500 text-white px-8 py-3 rounded-md transition-colors"
-                >
-                    MAIN MENU
-                </button>
-            </div>
-        </div>
-    );
-};
-
-const VictoryScreen: React.FC = () => {
-    const { score, restartGame, showMenu } = useStore();
-    
-    return (
-        <div className="absolute inset-0 bg-black/80 z-50 flex flex-col items-center justify-center text-white pointer-events-auto animate-in fade-in-25">
-            <h1 className="font-cyber text-7xl font-black tracking-widest text-yellow-400" style={{ textShadow: '0 0 15px #ffff00' }}>
-                VICTORY!
-            </h1>
-            <Trophy size={80} className="my-6 text-yellow-400" />
-            <p className="font-mono text-3xl text-center text-gray-300">
-                FINAL SCORE: <span className="text-white font-bold">{score}</span>
-            </p>
-            <div className="mt-10 flex gap-6">
-                <button 
-                    onClick={restartGame}
-                    className="font-cyber text-xl font-bold tracking-widest bg-cyan-500 hover:bg-cyan-400 text-black px-8 py-3 rounded-md transition-colors"
+                  onClick={() => { audio.init(); restartGame(); }}
+                  className="px-8 md:px-12 py-4 md:py-5 bg-white text-black font-black text-lg md:text-xl rounded hover:scale-105 transition-all shadow-[0_0_40px_rgba(255,255,255,0.3)] tracking-widest"
                 >
                     NEW RUN
                 </button>
+            </div>
+        </div>
+    );
+  }
+
+  // Fallback for PLAYING state
+  const isPlaying = status === GameStatus.PLAYING;
+  
+  if (!isPlaying) return null; // Should not happen due to checks above, but as a safeguard.
+
+  return (
+    <div className={containerClass}>
+        {/* Top Bar */}
+        <div className="flex justify-between items-start w-full">
+            <div className={`text-3xl md:text-5xl font-bold ${theme.main} ${theme.shadow} font-cyber`}>
+                {displayedScore.toLocaleString()}
+            </div>
+            
+            <div className="flex items-center space-x-2 md:space-x-4">
                 <button 
-                    onClick={showMenu}
-                    className="font-cyber text-xl font-bold tracking-widest bg-gray-600 hover:bg-gray-500 text-white px-8 py-3 rounded-md transition-colors"
+                    onClick={() => { audio.init(); openShop(); }} 
+                    className="pointer-events-auto p-2 bg-black/30 rounded-full hover:bg-white/20 transition-colors backdrop-blur-sm border border-white/10"
+                    aria-label="Pause and Open Shop"
                 >
-                    MAIN MENU
+                    <Pause className="w-6 h-6 text-white" />
                 </button>
+                <div className="flex space-x-1 md:space-x-2">
+                    {[...Array(maxLives)].map((_, i) => (
+                        <Heart 
+                            key={i} 
+                            className={`w-6 h-6 md:w-8 md:h-8 ${i < lives ? 'text-red-500 fill-red-500' : 'text-gray-800 fill-gray-800'} drop-shadow-[0_0_5px_#ff0000]`} 
+                        />
+                    ))}
+                </div>
             </div>
         </div>
-    );
-};
-
-const ShopModal: React.FC = () => {
-    const { score, buyItem, closeShop, hasDoubleJump, hasInvincibilityAbility } = useStore();
-    const [purchased, setPurchased] = useState<string[]>([]);
-    
-    const handleBuy = (item: ShopItem) => {
-        if (buyItem(item.id as any, item.cost)) {
-            // Success
-            if (item.oneTime) {
-                setPurchased(p => [...p, item.id]);
-            }
-        } else {
-            // Failure (not enough score)
-            // Can add feedback here, e.g. a shake animation
-        }
-    };
-    
-    return (
-        <div className="absolute inset-0 bg-black/90 z-[110] text-white pointer-events-auto animate-in fade-in-25 flex flex-col items-center justify-center font-cyber">
-            <h2 className="text-5xl font-bold tracking-widest mb-2" style={{ color: '#00ffff', textShadow: '0 0 10px #00ffff' }}>ABYSSAL FORGE</h2>
-            <div className="flex items-center gap-2 mb-8 text-2xl text-yellow-400">
-                <Diamond size={24} />
-                <span>{score}</span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 px-4">
-                {SHOP_ITEMS.map(item => {
-                    const isSoldOut = purchased.includes(item.id) || (item.id === 'DOUBLE_JUMP' && hasDoubleJump) || (item.id === 'IMMORTAL' && hasInvincibilityAbility);
-                    const canAfford = score >= item.cost;
-
-                    return (
-                        <div key={item.id} className={`relative flex flex-col items-center p-6 rounded-lg border-2 w-64 h-72 transition-all ${isSoldOut ? 'border-gray-600 bg-gray-800 text-gray-500' : 'border-cyan-400/50 bg-cyan-900/20'}`}>
-                            {isSoldOut && <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-3xl font-bold text-red-500 tracking-widest">SOLD OUT</div>}
-                            <item.icon size={48} className="mb-3 text-cyan-300" />
-                            <h3 className="text-2xl font-bold text-white text-center tracking-wider">{item.name}</h3>
-                            <p className="text-sm text-cyan-200/80 text-center flex-grow my-3">{item.description}</p>
-                            <button 
-                                onClick={() => handleBuy(item)}
-                                disabled={isSoldOut || !canAfford}
-                                className={`w-full py-2 rounded-md font-bold text-xl tracking-wider transition-colors ${
-                                    isSoldOut ? 'bg-gray-700 text-gray-500' : 
-                                    canAfford ? 'bg-yellow-500 text-black hover:bg-yellow-400' : 'bg-red-800 text-red-300 cursor-not-allowed'
-                                }`}
-                            >
-                                {item.cost} <Diamond size={16} className="inline -mt-1" />
-                            </button>
-                        </div>
-                    );
-                })}
-            </div>
-            
-            <button 
-                onClick={closeShop}
-                className="mt-10 font-cyber text-2xl font-bold tracking-widest bg-cyan-500 hover:bg-cyan-400 text-black px-10 py-4 rounded-md transition-all duration-300 flex items-center gap-3"
-            >
-                CONTINUE DIVE
-            </button>
+        
+        {/* Level Indicator - Moved to Top Center aligned with Score/Hearts */}
+        <div className="absolute top-5 left-1/2 transform -translate-x-1/2 text-sm md:text-lg text-purple-300 font-bold tracking-wider font-mono bg-black/50 px-3 py-1 rounded-full border border-purple-500/30 backdrop-blur-sm z-50">
+            ZONE {level} <span className="text-gray-500 text-xs md:text-sm">/ 6</span>
         </div>
-    );
-};
 
-
-// Main HUD Component
-export const HUD: React.FC = () => {
-    const { status, score, lives, maxLives, collectedLetters, level, hasInvincibilityAbility, isInvincible, isScoreMultiplierActive } = useStore();
-    
-    if (status === GameStatus.SPLASH) {
-        return <SplashScreen />;
-    }
-    if (status === GameStatus.MENU) {
-        return <MainMenu />;
-    }
-    if (status === GameStatus.GAME_OVER) {
-        return <GameOverScreen />;
-    }
-     if (status === GameStatus.VICTORY) {
-        return <VictoryScreen />;
-    }
-    if (status === GameStatus.SHOP) {
-        return <ShopModal />;
-    }
-
-    const currentTarget = LEVEL_TARGETS[level - 1];
-    const activeColor = LEVEL_COLORS[level - 1][0];
-
-    return (
-        <div className="absolute top-0 left-0 right-0 p-4 text-white font-mono z-10 pointer-events-none text-2xl"
-             style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}>
-            
-            {/* Top Left - Score & Multiplier */}
-            <div className="absolute top-4 left-4 flex flex-col items-start">
-                 <div className="flex items-center gap-2">
-                    <Diamond />
-                    <span>{score}</span>
-                </div>
-                 {isScoreMultiplierActive && (
-                    <div className="mt-1 text-sm font-bold text-green-400 animate-pulse flex items-center gap-1">
-                       <Zap size={16}/> 2X SCORE
-                    </div>
-                )}
-            </div>
-
-            {/* Top Right - Health */}
-            <div className="absolute top-4 right-4 flex items-center gap-2">
-                {Array(maxLives).fill(0).map((_, i) => (
-                    <Heart key={i} size={32} className={i < lives ? 'text-red-500 fill-current' : 'text-gray-600'} />
-                ))}
-            </div>
-            
-            {/* Top Center - Target Word */}
-            <div className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center justify-center gap-3">
-                {currentTarget.map((char, index) => {
-                    const isCollected = collectedLetters.includes(index);
-                    const color = isCollected ? '#ffffff' : activeColor;
-                    return (
-                        <div key={index} 
-                             className={`w-12 h-14 flex items-center justify-center rounded-md font-cyber font-black text-4xl transition-all duration-300`}
-                             style={{
-                                 backgroundColor: isCollected ? activeColor : 'rgba(0,0,0,0.5)',
-                                 color: isCollected ? '#000' : color,
-                                 border: `2px solid ${color}`,
-                                 boxShadow: isCollected ? `0 0 15px ${activeColor}` : 'none'
-                             }}
-                        >
-                            {char}
-                        </div>
-                    );
-                })}
-            </div>
-
-            {/* Bottom Center - Ability Indicator */}
-            {hasInvincibilityAbility && (
-                <div className={`absolute bottom-6 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 transition-opacity duration-300 ${isInvincible ? 'opacity-100' : 'opacity-40'}`}>
-                    <Shield size={40} className={`transition-colors ${isInvincible ? 'text-yellow-400 animate-pulse' : 'text-white'}`} />
-                    <span className="text-sm tracking-widest">{isInvincible ? 'ACTIVE' : 'READY'}</span>
-                </div>
+        {/* Circular Active Powerup Indicators - Bottom Left */}
+         <div className="absolute bottom-16 left-6 flex flex-col-reverse space-y-reverse space-y-4">
+            {isInvincible && (
+                <PowerUpTimer 
+                    icon={Shield} 
+                    color="#ffd700" 
+                    expiry={invincibilityExpiry} 
+                    totalDuration={invincibilityTotalDuration} 
+                />
+            )}
+            {isScoreMultiplierActive && (
+                 <PowerUpTimer 
+                    icon={Star} 
+                    color="#00ff88" 
+                    expiry={scoreMultiplierExpiry} 
+                    totalDuration={scoreMultiplierTotalDuration} 
+                />
             )}
         </div>
-    );
+
+        {/* Letter Collection Status */}
+        <div className="absolute top-16 md:top-24 left-1/2 transform -translate-x-1/2 w-full px-4 flex flex-wrap justify-center gap-1 md:gap-2">
+            {target.map((char, idx) => {
+                const isCollected = collectedLetters.includes(idx);
+                const color = letterColors[idx];
+
+                return (
+                    <div 
+                        key={idx}
+                        style={{
+                            borderColor: isCollected ? color : 'rgba(55, 65, 81, 1)',
+                            // Use dark text (almost black) when collected to contrast with neon background
+                            color: isCollected ? 'rgba(0, 0, 0, 0.8)' : 'rgba(55, 65, 81, 1)',
+                            boxShadow: isCollected ? `0 0 20px ${color}` : 'none',
+                            backgroundColor: isCollected ? color : 'rgba(0, 0, 0, 0.9)'
+                        }}
+                        className={`w-8 h-10 md:w-10 md:h-12 flex items-center justify-center border-2 font-black text-lg md:text-xl font-cyber rounded-lg transform transition-all duration-300`}
+                    >
+                        {char}
+                    </div>
+                );
+            })}
+        </div>
+
+        {/* Bottom Overlay */}
+        <div className="w-full flex justify-end items-end">
+             <div className={`flex items-center space-x-2 ${theme.speed} opacity-70`}>
+                 <Zap className="w-4 h-4 md:w-6 md:h-6 animate-pulse" />
+                 <span className="font-mono text-base md:text-xl">SPEED {Math.round((speed / RUN_SPEED_BASE) * 100)}%</span>
+             </div>
+        </div>
+    </div>
+  );
 };

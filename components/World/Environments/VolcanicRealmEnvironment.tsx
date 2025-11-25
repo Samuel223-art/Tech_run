@@ -93,7 +93,7 @@ const LavaFloor = () => {
 
     return (
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -5, -CHUNK_LENGTH / 2]}>
-            <planeGeometry args={[300, CHUNK_LENGTH, 1, 1]} />
+            <planeGeometry args={[300, CHUNK_LENGTH, 64, 64]} />
             <shaderMaterial
                 ref={matRef}
                 uniforms={uniforms}
@@ -108,8 +108,8 @@ const LavaFloor = () => {
                     uniform float uTime;
                     varying vec2 vUv;
                     
+                    // Simplex 2D noise
                     vec3 permute(vec3 x) { return mod(((x*34.0)+1.0)*x, 289.0); }
-
                     float snoise(vec2 v) {
                         const vec4 C = vec4(0.211324865405187, 0.366025403784439, -0.577350269189626, 0.024390243902439);
                         vec2 i  = floor(v + dot(v, C.yy) );
@@ -134,45 +134,40 @@ const LavaFloor = () => {
                         return 130.0 * dot(m, g);
                     }
 
-
                     void main() {
-                        vec2 uv = vUv * vec2(5.0, 8.0);
-                        float time = uTime * 0.2;
-                        
-                        float noise1 = snoise(uv + vec2(time, time * 0.8));
-                        float noise2 = snoise(uv * 2.0 + vec2(-time * 0.7, time * 0.5));
-                        
-                        float combinedNoise = (noise1 * 0.7 + noise2 * 0.3);
-                        
-                        float colorVal = smoothstep(0.1, 0.6, combinedNoise);
-                        
-                        vec3 lavaColor = mix(vec3(0.8, 0.2, 0.0), vec3(1.0, 0.8, 0.0), colorVal);
-                        
-                        float cracks = snoise(uv * 1.5 + vec2(0, time * 0.1));
-                        
-                        if(cracks > 0.8) {
-                            lavaColor = mix(lavaColor, vec3(0.1, 0.0, 0.0), smoothstep(0.8, 0.85, cracks));
-                        }
+                        vec2 uv = vUv * 8.0;
+                        float t = uTime * 0.2;
 
-                        // Enhanced Boiling effect
-                        // Fast, small bubbles
-                        float boilNoise1 = snoise(uv * 4.0 + vec2(0.0, uTime * 2.5));
-                        float boilMask1 = smoothstep(0.6, 0.8, boilNoise1);
-
-                        // Slower, larger swells
-                        float boilNoise2 = snoise(uv * 1.5 + vec2(uTime * 0.3, uTime * 0.5));
-                        float boilMask2 = smoothstep(0.3, 0.6, boilNoise2);
+                        // 1. Base Magma Flow (Low frequency)
+                        float flow = snoise(uv * 0.5 + vec2(t * 0.5, t * 0.2));
                         
-                        // Intense bubble pops
-                        float popNoise = snoise(uv * 8.0 + uTime * 5.0);
-                        float popMask = smoothstep(0.85, 0.9, popNoise);
-
-                        vec3 boilColor = vec3(1.0, 1.0, 0.1);
-                        lavaColor = mix(lavaColor, boilColor * 1.5, boilMask1 * 0.6); // smaller bubbles are brighter
-                        lavaColor = mix(lavaColor, boilColor, boilMask2 * 0.3); // larger swells are less intense
-                        lavaColor += boilColor * 2.0 * popMask; // Additive bright pops
+                        // 2. Crusting/Cracks (High frequency noise, thresholded)
+                        float cracks = snoise(uv * 3.0 + vec2(t * 0.1, 0.0));
+                        float crackMask = smoothstep(0.4, 0.45, abs(cracks)); // Sharp lines
                         
-                        gl_FragColor = vec4(lavaColor, 1.0);
+                        // 3. Boiling/Bubbling (Localized intense spots)
+                        float boil = snoise(uv * 6.0 + vec2(0.0, uTime * 1.5));
+                        float boilMask = smoothstep(0.6, 0.8, boil); // Only the peaks
+
+                        // Color Palette
+                        vec3 darkRock = vec3(0.1, 0.05, 0.05);
+                        vec3 magmaDark = vec3(0.5, 0.0, 0.0);
+                        vec3 magmaBright = vec3(1.0, 0.3, 0.0);
+                        vec3 hotWhite = vec3(1.0, 1.0, 0.6);
+
+                        // Mix base magma
+                        vec3 color = mix(magmaDark, magmaBright, flow * 0.5 + 0.5);
+
+                        // Apply Cracks (Darker veins)
+                        color = mix(color, darkRock, crackMask);
+
+                        // Apply Boiling (Brightest spots override cracks)
+                        color = mix(color, hotWhite, boilMask);
+                        
+                        // Add overall glow/heat intensity pulse
+                        color *= 1.0 + 0.2 * sin(uTime + uv.x);
+
+                        gl_FragColor = vec4(color, 1.0);
                     }
                 `}
             />
@@ -309,6 +304,31 @@ const VolcanicLaneGuides: React.FC = () => {
     );
 };
 
+const ParallaxVolcanoes = React.forwardRef<THREE.Group, { position: [number, number, number] }>((props, ref) => {
+    const volcanoes = useMemo(() => {
+        const temp = [];
+        for (let i = 0; i < 8; i++) {
+            const side = Math.random() > 0.5 ? 1 : -1;
+            const x = side * (250 + Math.random() * 150);
+            const z = -Math.random() * CHUNK_LENGTH;
+            const s = 60 + Math.random() * 60;
+            temp.push({ pos: [x, -20, z], scale: [s, s * 0.8, s] });
+        }
+        return temp;
+    }, []);
+
+    return (
+        <group ref={ref} {...props}>
+             {volcanoes.map((m, i) => (
+                 <mesh key={i} position={m.pos as any} scale={m.scale as any}>
+                     <coneGeometry args={[1, 1, 4]} />
+                     <meshStandardMaterial color="#3f0e04" roughness={0.9} fog={false} />
+                 </mesh>
+             ))}
+        </group>
+    );
+});
+
 const VolcanicContent = React.forwardRef<THREE.Group, { position: [number, number, number] }>((props, ref) => {
     return (
         <group ref={ref} {...props}>
@@ -324,9 +344,12 @@ const VolcanicRealmEnvironment = () => {
     const speed = useStore(state => state.speed);
     const contentRef1 = useRef<THREE.Group>(null);
     const contentRef2 = useRef<THREE.Group>(null);
+    const bgRef1 = useRef<THREE.Group>(null);
+    const bgRef2 = useRef<THREE.Group>(null);
 
     useFrame((state, delta) => {
         const movement = speed * delta;
+        // Foreground
         if (contentRef1.current) {
             contentRef1.current.position.z += movement;
             if (contentRef1.current.position.z > CHUNK_LENGTH) {
@@ -337,6 +360,21 @@ const VolcanicRealmEnvironment = () => {
             contentRef2.current.position.z += movement;
             if (contentRef2.current.position.z > CHUNK_LENGTH) {
                 contentRef2.current.position.z -= CHUNK_LENGTH * 2;
+            }
+        }
+
+        // Parallax Background
+        const bgMovement = movement * 0.1;
+        if (bgRef1.current) {
+            bgRef1.current.position.z += bgMovement;
+            if (bgRef1.current.position.z > CHUNK_LENGTH) {
+                bgRef1.current.position.z -= CHUNK_LENGTH * 2;
+            }
+        }
+        if (bgRef2.current) {
+            bgRef2.current.position.z += bgMovement;
+            if (bgRef2.current.position.z > CHUNK_LENGTH) {
+                bgRef2.current.position.z -= CHUNK_LENGTH * 2;
             }
         }
     });
@@ -351,6 +389,11 @@ const VolcanicRealmEnvironment = () => {
             <GiantJellyfish color='#ff4500' />
             <VolcanicParticles />
             <AshParticles />
+
+            <group>
+                <ParallaxVolcanoes ref={bgRef1} position={[0, 0, 0]} />
+                <ParallaxVolcanoes ref={bgRef2} position={[0, 0, -CHUNK_LENGTH]} />
+            </group>
 
             <group>
                 <VolcanicContent ref={contentRef1} position={[0, 0, 0]} />

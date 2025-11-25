@@ -25,8 +25,18 @@ const SnowfallParticles = () => {
             const y = Math.random() * 200;
             const parallaxFactor = (0.3 + Math.random() * 0.4);
             const scale = (0.1 + Math.random() * 0.2);
-            const drift = (Math.random() - 0.5) * 4; // Increased drift
-            temp.push({ x, y, z, parallaxFactor, scale, drift, initialX: x });
+            // Enhanced drift parameters
+            const driftSpeed = 1.0 + Math.random() * 2.0;
+            const driftOffset = Math.random() * Math.PI * 2;
+            
+            temp.push({ 
+                x, y, z, 
+                parallaxFactor, 
+                scale, 
+                driftSpeed,
+                driftOffset,
+                initialX: x 
+            });
         }
         return temp;
     }, []);
@@ -37,14 +47,19 @@ const SnowfallParticles = () => {
         
         particles.forEach((p, i) => {
             p.z += activeSpeed * delta * p.parallaxFactor;
-            p.y -= delta * (3.0 + p.parallaxFactor * 5); // Fall down
-            p.x = p.initialX + p.drift * Math.sin(state.clock.elapsedTime * 0.5 + p.z * 0.1); // Sway
+            p.y -= delta * (3.5 + p.parallaxFactor * 4); // Slightly faster fall
+            
+            // Simulating gentle wind sway
+            p.x = p.initialX + Math.sin(state.clock.elapsedTime * p.driftSpeed + p.driftOffset) * 4.0; 
 
             if (p.y < -10) {
                 p.y = 150 + Math.random() * 50;
             }
             if (p.z > 100) {
                 p.z = -550 - Math.random() * 50;
+                // Reset X on loop to avoid clumping
+                p.x = (Math.random() - 0.5) * 400;
+                p.initialX = p.x;
             }
             
             dummy.position.set(p.x, p.y, p.z);
@@ -235,6 +250,31 @@ const SnowyTerrain = () => {
     );
 };
 
+const ParallaxPeaks = React.forwardRef<THREE.Group, { position: [number, number, number] }>((props, ref) => {
+    const peaks = useMemo(() => {
+        const temp = [];
+        for (let i = 0; i < 15; i++) {
+            const side = Math.random() > 0.5 ? 1 : -1;
+            const x = side * (250 + Math.random() * 200);
+            const z = -Math.random() * CHUNK_LENGTH_SNOW;
+            const s = 50 + Math.random() * 70;
+            temp.push({ pos: [x, -30, z], scale: [s, s * 1.5, s] });
+        }
+        return temp;
+    }, []);
+
+    return (
+        <group ref={ref} {...props}>
+             {peaks.map((m, i) => (
+                 <mesh key={i} position={m.pos as any} scale={m.scale as any}>
+                     <coneGeometry args={[1, 1, 4]} />
+                     <meshStandardMaterial color="#cbd5e1" roughness={0.5} fog={false} />
+                 </mesh>
+             ))}
+        </group>
+    );
+});
+
 const SnowyContent = React.forwardRef<THREE.Group, { position: [number, number, number] }>((props, ref) => {
     const { laneCount } = useStore();
     const separators = useMemo(() => {
@@ -269,9 +309,12 @@ const SnowyWonderlandEnvironment = () => {
     const speed = useStore(state => state.speed);
     const contentRef1 = useRef<THREE.Group>(null);
     const contentRef2 = useRef<THREE.Group>(null);
+    const bgRef1 = useRef<THREE.Group>(null);
+    const bgRef2 = useRef<THREE.Group>(null);
 
     useFrame((state, delta) => {
         const movement = speed * delta;
+        // Foreground
         if (contentRef1.current) {
             contentRef1.current.position.z += movement;
             if (contentRef1.current.position.z > CHUNK_LENGTH_SNOW) {
@@ -284,6 +327,21 @@ const SnowyWonderlandEnvironment = () => {
                 contentRef2.current.position.z -= CHUNK_LENGTH_SNOW * 2;
             }
         }
+
+        // Parallax Background
+        const bgMovement = movement * 0.1;
+        if (bgRef1.current) {
+            bgRef1.current.position.z += bgMovement;
+            if (bgRef1.current.position.z > CHUNK_LENGTH_SNOW) {
+                bgRef1.current.position.z -= CHUNK_LENGTH_SNOW * 2;
+            }
+        }
+        if (bgRef2.current) {
+            bgRef2.current.position.z += bgMovement;
+            if (bgRef2.current.position.z > CHUNK_LENGTH_SNOW) {
+                bgRef2.current.position.z -= CHUNK_LENGTH_SNOW * 2;
+            }
+        }
     });
 
     return (
@@ -294,7 +352,13 @@ const SnowyWonderlandEnvironment = () => {
             <directionalLight castShadow position={[50, 80, 50]} intensity={1.5} color="#ffffff" shadow-mapSize={[1024, 1024]} />
             
             <Sky sunPosition={[100, 20, -100]} turbidity={1} rayleigh={0.5} mieCoefficient={0.003} mieDirectionalG={0.7} />
-             <group>
+             
+            <group>
+                <ParallaxPeaks ref={bgRef1} position={[0, 0, 0]} />
+                <ParallaxPeaks ref={bgRef2} position={[0, 0, -CHUNK_LENGTH_SNOW]} />
+            </group>
+
+            <group>
                 <SnowyContent ref={contentRef1} position={[0, 0, 0]} />
                 <SnowyContent ref={contentRef2} position={[0, 0, -CHUNK_LENGTH_SNOW]} />
             </group>

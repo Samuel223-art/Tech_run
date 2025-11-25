@@ -1,3 +1,4 @@
+
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -36,8 +37,7 @@ export interface GameObject {
   points?: number; // Score value for gems
   hasFired?: boolean; // For Aliens
   powerUpType?: 'INVINCIBILITY' | 'SCORE_MULTIPLIER';
-  isSnowball?: boolean; // For wide obstacles in Level 3
-  isRollingLog?: boolean; // For wide obstacles in Level 4
+  isSnowball?: boolean; // For wide obstacles
   rotation?: [number, number, number]; // For objects like fallen pawns
 }
 
@@ -53,16 +53,9 @@ export const LEVEL_TARGETS = [
     ['B', 'E', 'A', 'C', 'H'],
     ['H', 'O', 'T', 'L', 'A', 'V', 'A'],
     ['F', 'R', 'O', 'S', 'T', 'B', 'I', 'T', 'E'],
-    ['W', 'I', 'L', 'D', 'W', 'O', 'O', 'D'],
-];
-
-// Level 1: Beach (Coastal colors)
-const BEACH_COLORS = [
-    '#00bfff', // DeepSkyBlue
-    '#ffff00', // Yellow
-    '#f0e68c', // Khaki
-    '#add8e6', // LightBlue
-    '#87ceeb', // SkyBlue
+    ['W', 'O', 'O', 'D', 'L', 'A', 'N', 'D'],
+    ['C', 'H', 'E', 'C', 'K', 'M', 'A', 'T', 'E'],
+    ['C', 'R', 'Y', 'S', 'T', 'A', 'L'],
 ];
 
 // Level 2: Hot Lava (Fiery colors)
@@ -74,38 +67,77 @@ const HOTLAVA_COLORS = [
     '#dc143c', // Crimson
     '#ffea00', // Yellow
     '#ff7f50', // Coral
+    '#ff4500', 
+    '#ff8c00',
 ];
 
-// Level 3: Snowy Wonderland (Icy colors)
-const ICY_COLORS = [
-    '#ffffff', // White
-    '#afeeee', // PaleTurquoise
-    '#b0e0e6', // PowderBlue
-    '#add8e6', // LightBlue
-    '#87cefa', // LightSkyBlue
-    '#00bfff', // DeepSkyBlue
-    '#1e90ff', // DodgerBlue
-    '#6495ed', // CornflowerBlue
-    '#f0f8ff', // AliceBlue
+// Level 3: Snow (Icy/cool colors)
+const SNOW_COLORS = [
+    '#e0f2fe', // sky-100
+    '#a5f3fc', // cyan-200
+    '#67e8f9', // cyan-300
+    '#22d3ee', // cyan-400
+    '#06b6d4', // cyan-500
+    '#0891b2', // cyan-600
+    '#0e7490', // cyan-700
+    '#155e75', // cyan-800
+    '#ffffff', // white
+    '#e0e7ff', // indigo-100
+    '#c7d2fe', // indigo-200
 ];
 
-// Level 4: Wildwood (Earthy colors)
+// Level 4: Forest (Earthy/Green colors)
 const FOREST_COLORS = [
-    '#556b2f', // DarkOliveGreen
-    '#6b8e23', // OliveDrab
-    '#8fbc8f', // DarkSeaGreen
-    '#228b22', // ForestGreen
-    '#d2b48c', // Tan
-    '#cd853f', // Peru
-    '#a0522d', // Sienna
-    '#8b4513', // SaddleBrown
+    '#22c55e', // green-500
+    '#84cc16', // lime-500
+    '#4d7c0f', // lime-800
+    '#166534', // green-800
+    '#a3e635', // lime-400
+    '#15803d', // green-700
+    '#65a30d', // lime-600
+    '#14532d', // green-900
+];
+
+// Level 5: Chess (Black, White, Gold)
+const CHESS_COLORS = [
+    '#ffffff', // White
+    '#000000', // Black (rendered as dark grey usually)
+    '#ffd700', // Gold
+    '#c0c0c0', // Silver
+    '#ffffff',
+    '#000000',
+    '#ffd700',
+    '#c0c0c0',
+    '#ffffff',
+];
+
+// Level 6: Crystal Caves (Purple, Magenta, Cyan)
+const CRYSTAL_COLORS = [
+    '#d8b4fe', // purple-300
+    '#c084fc', // purple-400
+    '#a855f7', // purple-500
+    '#e879f9', // fuchsia-400
+    '#d946ef', // fuchsia-500
+    '#22d3ee', // cyan-400
+    '#818cf8', // indigo-400
+];
+
+// Level 1: Beach (Coastal colors)
+const BEACH_COLORS = [
+    '#00bfff', // DeepSkyBlue
+    '#ffff00', // Yellow
+    '#f0e68c', // Khaki
+    '#add8e6', // LightBlue
+    '#87ceeb', // SkyBlue
 ];
 
 export const LEVEL_COLORS = [
     BEACH_COLORS,
     HOTLAVA_COLORS,
-    ICY_COLORS,
+    SNOW_COLORS,
     FOREST_COLORS,
+    CHESS_COLORS,
+    CRYSTAL_COLORS,
 ];
 
 export interface ShopItem {
@@ -114,5 +146,6 @@ export interface ShopItem {
     description: string;
     cost: number;
     icon: any; // Lucide icon component
-    oneTime?: boolean; // If true, remove from pool after buying
+    type: 'UPGRADE' | 'CONSUMABLE' | 'ABILITY';
+    oneTime?: boolean; 
 }

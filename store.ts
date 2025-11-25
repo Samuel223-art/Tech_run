@@ -1,3 +1,4 @@
+
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -22,12 +23,23 @@ interface GameState {
   distance: number;
   highScore: number;
   
-  // Inventory / Abilities
+  // Abilities & Upgrades
   hasDoubleJump: boolean;
-  hasInvincibilityAbility: boolean;
+  hasHover: boolean;
+  
+  // Timers & Durations
+  powerUpDurationAdd: number; // Extra milliseconds
+  damageShieldDuration: number; // Milliseconds
+
+  // Active Effects
   isInvincible: boolean;
+  invincibilityExpiry: number;
+  invincibilityTotalDuration: number;
+
   isScoreMultiplierActive: boolean;
   scoreMultiplier: number;
+  scoreMultiplierExpiry: number;
+  scoreMultiplierTotalDuration: number;
 
   // Actions
   showMenu: () => void;
@@ -41,15 +53,17 @@ interface GameState {
   setStatus: (status: GameStatus) => void;
   setDistance: (dist: number) => void;
   
-  // Shop / Abilities
-  buyItem: (type: 'DOUBLE_JUMP' | 'MAX_LIFE' | 'HEAL' | 'IMMORTAL', cost: number) => boolean;
+  // Shop
+  buyItem: (id: string, cost: number) => boolean;
   advanceLevel: () => void;
   openShop: () => void;
   closeShop: () => void;
   activateInvincibilityAbility: () => void;
 }
 
-const MAX_LEVEL = 4;
+const MAX_LEVEL = 6;
+const BASE_POWERUP_DURATION = 15000;
+const BASE_SHIELD_DURATION = 1500;
 
 export const useStore = create<GameState>((set, get) => ({
   status: GameStatus.SPLASH,
@@ -67,23 +81,35 @@ export const useStore = create<GameState>((set, get) => ({
   highScore: parseInt(localStorage.getItem('geminiRunnerHighScore') || '0'),
   
   hasDoubleJump: false,
-  hasInvincibilityAbility: false,
+  hasHover: false,
+  powerUpDurationAdd: 0,
+  damageShieldDuration: BASE_SHIELD_DURATION,
+
   isInvincible: false,
+  invincibilityExpiry: 0,
+  invincibilityTotalDuration: 0,
+
   isScoreMultiplierActive: false,
   scoreMultiplier: 1,
+  scoreMultiplierExpiry: 0,
+  scoreMultiplierTotalDuration: 0,
 
   showMenu: () => set(state => ({ status: GameStatus.MENU, previousStatus: state.status })),
 
   startGame: (startLevel = 1) => {
     let newSpeed;
     if (startLevel === 2) {
-        newSpeed = RUN_SPEED_BASE * 1.5;
+        newSpeed = RUN_SPEED_BASE * 1.3; // 130%
     } else if (startLevel === 3) {
-        newSpeed = RUN_SPEED_BASE * 2.0;
+        newSpeed = RUN_SPEED_BASE * 1.6; // 160%
     } else if (startLevel === 4) {
-        newSpeed = RUN_SPEED_BASE * 2.5;
+        newSpeed = RUN_SPEED_BASE * 1.9; // 190%
+    } else if (startLevel === 5) {
+        newSpeed = RUN_SPEED_BASE * 2.2; // 220%
+    } else if (startLevel === 6) {
+        newSpeed = RUN_SPEED_BASE * 2.5; // 250%
     } else {
-        newSpeed = RUN_SPEED_BASE;
+        newSpeed = RUN_SPEED_BASE; // 100%
     }
     
     set({ 
@@ -99,9 +125,15 @@ export const useStore = create<GameState>((set, get) => ({
       laneCount: 3,
       gemsCollected: 0,
       distance: 0,
+      
       hasDoubleJump: false,
-      hasInvincibilityAbility: false,
-      isInvincible: false
+      hasHover: false,
+      powerUpDurationAdd: 0,
+      damageShieldDuration: BASE_SHIELD_DURATION,
+      isInvincible: false,
+      invincibilityExpiry: 0,
+      isScoreMultiplierActive: false,
+      scoreMultiplierExpiry: 0
     });
   },
 
@@ -119,8 +151,13 @@ export const useStore = create<GameState>((set, get) => ({
     gemsCollected: 0,
     distance: 0,
     hasDoubleJump: false,
-    hasInvincibilityAbility: false,
-    isInvincible: false
+    hasHover: false,
+    powerUpDurationAdd: 0,
+    damageShieldDuration: BASE_SHIELD_DURATION,
+    isInvincible: false,
+    invincibilityExpiry: 0,
+    isScoreMultiplierActive: false,
+    scoreMultiplierExpiry: 0
   })),
 
   takeDamage: () => {
@@ -154,22 +191,13 @@ export const useStore = create<GameState>((set, get) => ({
   },
 
   collectLetter: (index) => {
-    const { collectedLetters, level, speed } = get();
+    const { collectedLetters, level } = get();
     
     if (!collectedLetters.includes(index)) {
       const newLetters = [...collectedLetters, index];
       
-      let newSpeed = speed;
-      if (level === 1) {
-          const speedIncrease = RUN_SPEED_BASE * 0.10;
-          // Cap speed at 200% of base speed in level 1
-          newSpeed = Math.min(speed + speedIncrease, RUN_SPEED_BASE * 2);
-      }
-      // No speed increase for letters in levels 2 & 3
-
       set({ 
         collectedLetters: newLetters,
-        speed: newSpeed,
       });
 
       const currentTarget = LEVEL_TARGETS[level - 1];
@@ -188,12 +216,38 @@ export const useStore = create<GameState>((set, get) => ({
   },
   
   collectPowerUp: (type) => {
+    const duration = BASE_POWERUP_DURATION + get().powerUpDurationAdd;
+    const now = Date.now();
+    
     if (type === 'INVINCIBILITY') {
-        set({ isInvincible: true });
-        setTimeout(() => set({ isInvincible: false }), 15000); // 15 seconds
+        const newExpiry = now + duration;
+        set({ 
+            isInvincible: true, 
+            invincibilityExpiry: newExpiry, 
+            invincibilityTotalDuration: duration 
+        });
+        
+        // Timeout to turn off, checking timestamp to handle overlaps/extensions
+        setTimeout(() => {
+            if (Date.now() >= get().invincibilityExpiry) {
+                set({ isInvincible: false });
+            }
+        }, duration);
+
     } else if (type === 'SCORE_MULTIPLIER') {
-        set({ isScoreMultiplierActive: true, scoreMultiplier: 2 });
-        setTimeout(() => set({ isScoreMultiplierActive: false, scoreMultiplier: 1 }), 15000); // 15 seconds
+        const newExpiry = now + duration;
+        set({ 
+            isScoreMultiplierActive: true, 
+            scoreMultiplier: 2, 
+            scoreMultiplierExpiry: newExpiry,
+            scoreMultiplierTotalDuration: duration
+        });
+        
+        setTimeout(() => {
+             if (Date.now() >= get().scoreMultiplierExpiry) {
+                set({ isScoreMultiplierActive: false, scoreMultiplier: 1 });
+             }
+        }, duration);
     }
   },
 
@@ -203,14 +257,17 @@ export const useStore = create<GameState>((set, get) => ({
       
       let newSpeed;
       if (nextLevel === 2) {
-          newSpeed = RUN_SPEED_BASE * 1.5; // 150%
+          newSpeed = RUN_SPEED_BASE * 1.3;
       } else if (nextLevel === 3) {
-          newSpeed = RUN_SPEED_BASE * 2.0; // 200%
+          newSpeed = RUN_SPEED_BASE * 1.6;
       } else if (nextLevel === 4) {
-          newSpeed = RUN_SPEED_BASE * 2.5; // 250%
+          newSpeed = RUN_SPEED_BASE * 1.9;
+      } else if (nextLevel === 5) {
+          newSpeed = RUN_SPEED_BASE * 2.2;
+      } else if (nextLevel === 6) {
+          newSpeed = RUN_SPEED_BASE * 2.5;
       } else {
-          // Fallback for potential future levels
-          newSpeed = get().speed + RUN_SPEED_BASE * 0.40;
+          newSpeed = RUN_SPEED_BASE;
       }
 
       set(state => ({
@@ -226,7 +283,6 @@ export const useStore = create<GameState>((set, get) => ({
   
   closeShop: () => set((state) => {
     const nextStatus = state.previousStatus === GameStatus.PAUSED ? GameStatus.PAUSED : GameStatus.PLAYING;
-    // If we are closing the shop after a level-up, sync the visual theme now.
     if (state.level > state.visualLevel) {
         return { 
             status: nextStatus, 
@@ -237,24 +293,31 @@ export const useStore = create<GameState>((set, get) => ({
     return { status: nextStatus, previousStatus: GameStatus.SHOP };
   }),
 
-  buyItem: (type, cost) => {
+  buyItem: (id, cost) => {
       const { score, maxLives, lives } = get();
       
       if (score >= cost) {
+          // Deduct score
           set({ score: score - cost });
           
-          switch (type) {
-              case 'DOUBLE_JUMP':
-                  set({ hasDoubleJump: true });
+          switch (id) {
+              case 'POWER_EXT':
+                  set(state => ({ powerUpDurationAdd: state.powerUpDurationAdd + 5000 }));
                   break;
-              case 'MAX_LIFE':
+              case 'HULL_EXPANSION':
                   set({ maxLives: maxLives + 1, lives: lives + 1 });
                   break;
-              case 'HEAL':
-                  set({ lives: Math.min(lives + 1, maxLives) });
+              case 'REFILL_LIFE':
+                  set({ lives: maxLives });
                   break;
-              case 'IMMORTAL':
-                  set({ hasInvincibilityAbility: true });
+              case 'REACTIVE_SHIELD':
+                  set({ damageShieldDuration: 6000 });
+                  break;
+              case 'HYDRO_JETS':
+                  set({ hasDoubleJump: true });
+                  break;
+              case 'GRAV_DAMPENERS':
+                  set({ hasHover: true });
                   break;
           }
           return true;
@@ -263,11 +326,7 @@ export const useStore = create<GameState>((set, get) => ({
   },
 
   activateInvincibilityAbility: () => {
-      const { hasInvincibilityAbility, isInvincible } = get();
-      if (hasInvincibilityAbility && !isInvincible) {
-          set({ isInvincible: true });
-          setTimeout(() => set({ isInvincible: false }), 15000);
-      }
+    // Placeholder if we add manual activation abilities later
   },
 
   setStatus: (status) => set((state) => ({ status, previousStatus: state.status })),

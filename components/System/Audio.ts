@@ -193,6 +193,46 @@ export class AudioController {
     osc.start(t);
     osc.stop(t + 0.15);
   }
+
+  playCrystalResonance() {
+    if (!this.ctx || !this.masterGain) this.init();
+    if (!this.ctx || !this.masterGain) return;
+
+    const t = this.ctx.currentTime;
+    
+    // Ethereal sine sweep
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    
+    osc.type = 'sine';
+    // Sweep A5 to A4
+    osc.frequency.setValueAtTime(880, t); 
+    osc.frequency.exponentialRampToValueAtTime(440, t + 1.2);
+
+    // Slow attack, long tail
+    gain.gain.setValueAtTime(0, t);
+    gain.gain.linearRampToValueAtTime(0.25, t + 0.1);
+    gain.gain.exponentialRampToValueAtTime(0.01, t + 1.2);
+
+    osc.connect(gain);
+    gain.connect(this.masterGain);
+
+    osc.start(t);
+    osc.stop(t + 1.2);
+
+    // Add a sparkle overtone
+    const osc2 = this.ctx.createOscillator();
+    const gain2 = this.ctx.createGain();
+    osc2.type = 'triangle';
+    osc2.frequency.setValueAtTime(1760, t);
+    gain2.gain.setValueAtTime(0, t);
+    gain2.gain.linearRampToValueAtTime(0.05, t + 0.05);
+    gain2.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+    osc2.connect(gain2);
+    gain2.connect(this.masterGain);
+    osc2.start(t);
+    osc2.stop(t + 0.5);
+  }
 }
 
 export const audio = new AudioController();

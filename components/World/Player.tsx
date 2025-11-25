@@ -1,3 +1,4 @@
+
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -12,8 +13,11 @@ import { LANE_WIDTH, GameStatus } from '../../types';
 import { audio } from '../System/Audio';
 
 // Physics Constants
-const GRAVITY = 50;
-const JUMP_FORCE = 16; // Results in ~2.56 height (v^2 / 2g)
+const GRAVITY = 90; // Snappier gravity for responsive feel
+const JUMP_FORCE = 27; // High force to compensate gravity
+const LANDING_DURATION = 0.15; // Time for landing squash animation
+const AIR_CONTROL_FACTOR = 8; // Slower lerp in air for "floaty" control feel
+const GROUND_CONTROL_FACTOR = 20; // Snappy lerp on ground
 
 // Static Geometries
 const TORSO_GEO = new THREE.CylinderGeometry(0.25, 0.15, 0.6, 4);
@@ -38,16 +42,25 @@ export const Player: React.FC = () => {
   const rightLegRef = useRef<THREE.Group>(null);
   const headRef = useRef<THREE.Group>(null);
 
-  const { status, laneCount, takeDamage, hasDoubleJump, activateInvincibilityAbility, isInvincible } = useStore();
+  const { status, laneCount, takeDamage, hasDoubleJump, hasHover, activateInvincibilityAbility, isInvincible, damageShieldDuration } = useStore();
   
   const [lane, setLane] = React.useState(0);
   const targetX = useRef(0);
   
-  // Physics State (using Refs for immediate logic updates)
+  // Physics State
   const isJumping = useRef(false);
   const velocityY = useRef(0);
   const jumpsPerformed = useRef(0); 
-  const spinRotation = useRef(0); // For double jump flip
+  const spinRotation = useRef(0); 
+  
+  // Hover State
+  const hoverTimer = useRef(0);
+  const isHovering = useRef(false);
+
+  // Animation State
+  const jumpBuffer = useRef(0);
+  const landingTimer = useRef(0);
+  const wasAirborne = useRef(false);
 
   const touchStartX = useRef(0);
   const touchStartY = useRef(0);
@@ -75,12 +88,20 @@ export const Player: React.FC = () => {
           jumpsPerformed.current = 0;
           velocityY.current = 0;
           spinRotation.current = 0;
+          isHovering.current = false;
+          hoverTimer.current = 0;
+          landingTimer.current = 0;
+          jumpBuffer.current = 0;
+          wasAirborne.current = false;
           if (groupRef.current) groupRef.current.position.y = 0;
-          if (bodyRef.current) bodyRef.current.rotation.x = 0;
+          if (bodyRef.current) {
+              bodyRef.current.rotation.x = 0;
+              bodyRef.current.scale.set(1, 1, 1);
+          }
       }
   }, [status]);
   
-  // Safety: Clamp lane if laneCount changes (e.g. restart)
+  // Safety: Clamp lane if laneCount changes
   useEffect(() => {
       const maxLane = Math.floor(laneCount / 2);
       if (Math.abs(lane) > maxLane) {
@@ -88,22 +109,45 @@ export const Player: React.FC = () => {
       }
   }, [laneCount, lane]);
 
-  // --- Controls (Keyboard & Touch) ---
-  const triggerJump = useCallback(() => {
-    const maxJumps = hasDoubleJump ? 2 : 1;
-
-    if (!isJumping.current) {
+  const performJump = useCallback(() => {
         audio.playJump(false);
         isJumping.current = true;
         jumpsPerformed.current = 1;
         velocityY.current = JUMP_FORCE;
+        // Reset landing animation if we jump immediately
+        landingTimer.current = 0;
+        if(bodyRef.current) bodyRef.current.scale.setScalar(1);
+  }, []);
+
+  // --- Controls (Keyboard & Touch) ---
+  const triggerJump = useCallback(() => {
+    const maxJumps = (hasDoubleJump || hasHover) ? 2 : 1;
+
+    if (!isJumping.current) {
+        performJump();
     } else if (jumpsPerformed.current < maxJumps) {
         audio.playJump(true);
         jumpsPerformed.current += 1;
-        velocityY.current = JUMP_FORCE;
-        spinRotation.current = 0;
+        
+        // Double Jump Logic
+        if (hasDoubleJump) {
+             velocityY.current = JUMP_FORCE;
+             spinRotation.current = 0;
+        }
+
+        // Hover Logic
+        if (hasHover) {
+             isHovering.current = true;
+             hoverTimer.current = 0.8; 
+             if (!hasDoubleJump) {
+                 velocityY.current = 0; 
+             }
+        }
+    } else {
+        // Jump Buffering: Store jump attempt
+        jumpBuffer.current = Date.now();
     }
-  }, [hasDoubleJump]);
+  }, [hasDoubleJump, hasHover, performJump]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -112,17 +156,14 @@ export const Player: React.FC = () => {
 
       if (e.key === 'ArrowLeft') setLane(l => Math.max(l - 1, -maxLane));
       else if (e.key === 'ArrowRight') setLane(l => Math.min(l + 1, maxLane));
-      else if (e.key === 'ArrowUp' || e.key === 'w') triggerJump();
-      else if (e.key === ' ' || e.key === 'Enter') {
-          activateInvincibilityAbility();
-      }
+      else if (e.key === 'ArrowUp' || e.key === 'w' || e.key === ' ') triggerJump();
+      else if (e.key === 'Enter') activateInvincibilityAbility();
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [status, laneCount, triggerJump, activateInvincibilityAbility]);
 
-  // Touch handlers are split into two effects to prevent bugs from re-registering listeners unnecessarily.
   useEffect(() => {
     const handleTouchStart = (e: TouchEvent) => {
       touchStartX.current = e.touches[0].clientX;
@@ -130,7 +171,7 @@ export const Player: React.FC = () => {
     };
     window.addEventListener('touchstart', handleTouchStart);
     return () => window.removeEventListener('touchstart', handleTouchStart);
-  }, []); // Register this once
+  }, []); 
 
   useEffect(() => {
     const handleTouchEnd = (e: TouchEvent) => {
@@ -158,23 +199,54 @@ export const Player: React.FC = () => {
     if (!groupRef.current) return;
     if (status !== GameStatus.PLAYING && status !== GameStatus.SHOP) return;
 
-    // 1. Horizontal Position
-    targetX.current = lane * LANE_WIDTH;
-    groupRef.current.position.x = THREE.MathUtils.lerp(groupRef.current.position.x, targetX.current, delta * 15);
+    const safeDelta = Math.min(delta, 0.1);
 
-    // 2. Physics (Jump)
+    // 1. Horizontal Position (Air Control)
+    targetX.current = lane * LANE_WIDTH;
+    // Smoother lerp in air for "floaty" feel, snappy on ground
+    const lerpSpeed = isJumping.current ? AIR_CONTROL_FACTOR : GROUND_CONTROL_FACTOR;
+    groupRef.current.position.x = THREE.MathUtils.lerp(groupRef.current.position.x, targetX.current, safeDelta * lerpSpeed);
+
+    // 2. Physics (Jump & Hover)
     if (isJumping.current) {
-        groupRef.current.position.y += velocityY.current * delta;
-        velocityY.current -= GRAVITY * delta;
+        wasAirborne.current = true;
+        
+        if (isHovering.current) {
+            hoverTimer.current -= safeDelta;
+            if (hoverTimer.current <= 0) {
+                isHovering.current = false;
+            }
+        } else {
+            velocityY.current -= GRAVITY * safeDelta;
+        }
+
+        groupRef.current.position.y += velocityY.current * safeDelta;
+
+        // Ground collision
         if (groupRef.current.position.y <= 0) {
             groupRef.current.position.y = 0;
             isJumping.current = false;
+            isHovering.current = false;
             jumpsPerformed.current = 0;
             velocityY.current = 0;
             if (bodyRef.current) bodyRef.current.rotation.x = 0;
+
+            // Landing Trigger
+            if (wasAirborne.current) {
+                landingTimer.current = LANDING_DURATION;
+                wasAirborne.current = false;
+                
+                // Jump Buffer Check (200ms window)
+                if (Date.now() - jumpBuffer.current < 200) {
+                    performJump();
+                    jumpBuffer.current = 0;
+                }
+            }
         }
-        if (jumpsPerformed.current === 2 && bodyRef.current) {
-             spinRotation.current -= delta * 15;
+
+        // Spin animation for double jump
+        if (jumpsPerformed.current === 2 && bodyRef.current && !isHovering.current) {
+             spinRotation.current -= safeDelta * 15;
              if (spinRotation.current < -Math.PI * 2) spinRotation.current = -Math.PI * 2;
              bodyRef.current.rotation.x = spinRotation.current;
         }
@@ -185,30 +257,55 @@ export const Player: React.FC = () => {
     groupRef.current.rotation.z = -xDiff * 0.2; 
     groupRef.current.rotation.x = isJumping.current ? 0.1 : 0.05; 
 
-    // 3. Skeletal Animation
+    // 3. Animation Control
     const time = state.clock.elapsedTime * 25; 
+
+    // Landing Animation (Squash)
+    if (landingTimer.current > 0) {
+        landingTimer.current -= safeDelta;
+        const t = 1 - (landingTimer.current / LANDING_DURATION); 
+        // Squash curve: 0 -> -0.3 -> 0
+        const squash = Math.sin(t * Math.PI) * 0.3; 
+        if (bodyRef.current) {
+            bodyRef.current.scale.set(1 + squash * 0.4, 1 - squash * 0.4, 1 + squash * 0.4);
+        }
+    } else if (bodyRef.current && !isJumping.current) {
+        // Return to normal scale if not jumping
+        bodyRef.current.scale.lerp(new THREE.Vector3(1,1,1), safeDelta * 10);
+    }
     
-    if (!isJumping.current) {
+    // Limb Animations
+    if (isJumping.current && bodyRef.current) {
+        // Jump Pose
+        const isDoubleJumping = jumpsPerformed.current === 2 && !isHovering.current;
+        const jumpPoseSpeed = safeDelta * 15;
+
+        if (!isDoubleJumping) {
+            // Knees up, Arms up
+            if (leftLegRef.current) leftLegRef.current.rotation.x = THREE.MathUtils.lerp(leftLegRef.current.rotation.x, -1.5, jumpPoseSpeed);
+            if (rightLegRef.current) rightLegRef.current.rotation.x = THREE.MathUtils.lerp(rightLegRef.current.rotation.x, -1.0, jumpPoseSpeed);
+            if (leftArmRef.current) leftArmRef.current.rotation.x = THREE.MathUtils.lerp(leftArmRef.current.rotation.x, -2.5, jumpPoseSpeed);
+            if (rightArmRef.current) rightArmRef.current.rotation.x = THREE.MathUtils.lerp(rightArmRef.current.rotation.x, -2.5, jumpPoseSpeed);
+            
+            // Stretch effect based on velocity
+            if (velocityY.current > 0) {
+                 bodyRef.current.scale.lerp(new THREE.Vector3(0.9, 1.1, 0.9), safeDelta * 5);
+            }
+        }
+    } else {
+        // Run Cycle
         if (leftArmRef.current) leftArmRef.current.rotation.x = Math.sin(time) * 0.7;
         if (rightArmRef.current) rightArmRef.current.rotation.x = Math.sin(time + Math.PI) * 0.7;
         if (leftLegRef.current) leftLegRef.current.rotation.x = Math.sin(time + Math.PI) * 1.0;
         if (rightLegRef.current) rightLegRef.current.rotation.x = Math.sin(time) * 1.0;
         if (bodyRef.current) bodyRef.current.position.y = 1.1 + Math.abs(Math.sin(time)) * 0.15;
-    } else {
-        const jumpPoseSpeed = delta * 10;
-        if (leftArmRef.current) leftArmRef.current.rotation.x = THREE.MathUtils.lerp(leftArmRef.current.rotation.x, -2.5, jumpPoseSpeed);
-        if (rightArmRef.current) rightArmRef.current.rotation.x = THREE.MathUtils.lerp(rightArmRef.current.rotation.x, -2.5, jumpPoseSpeed);
-        if (leftLegRef.current) leftLegRef.current.rotation.x = THREE.MathUtils.lerp(leftLegRef.current.rotation.x, 0.5, jumpPoseSpeed);
-        if (rightLegRef.current) rightLegRef.current.rotation.x = THREE.MathUtils.lerp(rightLegRef.current.rotation.x, -0.5, jumpPoseSpeed);
-        if (bodyRef.current && jumpsPerformed.current !== 2) bodyRef.current.position.y = 1.1 + Math.sin(state.clock.elapsedTime * 8) * 0.2; 
     }
 
     // 4. Dynamic Shadow
     if (shadowRef.current) {
         const height = groupRef.current.position.y;
         const scale = Math.max(0.2, 1 - (height / 2.5) * 0.5);
-        const runStretch = isJumping.current ? 1 : 1 + Math.abs(Math.sin(time)) * 0.3;
-        shadowRef.current.scale.set(scale, scale, scale * runStretch);
+        shadowRef.current.scale.set(scale, scale, scale);
         const material = shadowRef.current.material as THREE.MeshBasicMaterial;
         if (material && !Array.isArray(material)) material.opacity = Math.max(0.1, 0.3 - (height / 2.5) * 0.2);
     }
@@ -217,7 +314,7 @@ export const Player: React.FC = () => {
     const showFlicker = postDamageInvincible.current || isInvincible;
     if (showFlicker) {
         if (postDamageInvincible.current) {
-             if (Date.now() - lastDamageTime.current > 1500) {
+             if (Date.now() - lastDamageTime.current > damageShieldDuration) {
                 postDamageInvincible.current = false;
                 groupRef.current.visible = true;
              } else {
@@ -252,7 +349,7 @@ export const Player: React.FC = () => {
      };
      window.addEventListener('player-hit', checkHit);
      return () => window.removeEventListener('player-hit', checkHit);
-  }, [takeDamage, isInvincible]);
+  }, [takeDamage, isInvincible, damageShieldDuration]);
 
   return (
     <group ref={groupRef} position={[0, 0, 0]}>

@@ -8,8 +8,10 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useStore } from '../../../store';
 import { LANE_WIDTH } from '../../../types';
-import { Sky, Clouds, Cloud } from '@react-three/drei';
+import { Sky } from '@react-three/drei';
 import { CrystalCaveParticles } from './SharedComponents';
+
+const CHUNK_LENGTH_COASTAL = 400;
 
 const WaterFloor = () => {
     const matRef = useRef<THREE.ShaderMaterial>(null);
@@ -178,6 +180,31 @@ const LowPolyTrees = () => {
 
 const CoastalParticles = () => <CrystalCaveParticles color="#00ffff" />;
 
+const ParallaxMountains = React.forwardRef<THREE.Group, { position: [number, number, number] }>((props, ref) => {
+    const mountains = useMemo(() => {
+        const temp = [];
+        for (let i = 0; i < 12; i++) {
+            const side = Math.random() > 0.5 ? 1 : -1;
+            const x = side * (250 + Math.random() * 200);
+            const z = -Math.random() * CHUNK_LENGTH_COASTAL;
+            const s = 40 + Math.random() * 60;
+            temp.push({ pos: [x, -20, z], scale: [s, s * 1.5, s] });
+        }
+        return temp;
+    }, []);
+
+    return (
+        <group ref={ref} {...props}>
+             {mountains.map((m, i) => (
+                 <mesh key={i} position={m.pos as any} scale={m.scale as any}>
+                     <coneGeometry args={[1, 1, 4]} />
+                     <meshStandardMaterial color="#1e293b" roughness={0.9} fog={false} />
+                 </mesh>
+             ))}
+        </group>
+    );
+});
+
 const CoastalContent = React.forwardRef<THREE.Group, { position: [number, number, number] }>((props, ref) => {
     const { laneCount } = useStore();
     const separators = useMemo(() => {
@@ -212,10 +239,12 @@ const CoastalRunEnvironment = () => {
     const speed = useStore(state => state.speed);
     const contentRef1 = useRef<THREE.Group>(null);
     const contentRef2 = useRef<THREE.Group>(null);
-    const CHUNK_LENGTH_COASTAL = 400;
+    const bgRef1 = useRef<THREE.Group>(null);
+    const bgRef2 = useRef<THREE.Group>(null);
 
     useFrame((state, delta) => {
         const movement = speed * delta;
+        // Foreground
         if (contentRef1.current) {
             contentRef1.current.position.z += movement;
             if (contentRef1.current.position.z > CHUNK_LENGTH_COASTAL) {
@@ -228,6 +257,21 @@ const CoastalRunEnvironment = () => {
                 contentRef2.current.position.z -= CHUNK_LENGTH_COASTAL * 2;
             }
         }
+
+        // Background Parallax (Slower)
+        const bgMovement = movement * 0.1;
+        if (bgRef1.current) {
+            bgRef1.current.position.z += bgMovement;
+            if (bgRef1.current.position.z > CHUNK_LENGTH_COASTAL) {
+                bgRef1.current.position.z -= CHUNK_LENGTH_COASTAL * 2;
+            }
+        }
+        if (bgRef2.current) {
+            bgRef2.current.position.z += bgMovement;
+            if (bgRef2.current.position.z > CHUNK_LENGTH_COASTAL) {
+                bgRef2.current.position.z -= CHUNK_LENGTH_COASTAL * 2;
+            }
+        }
     });
 
     return (
@@ -238,10 +282,11 @@ const CoastalRunEnvironment = () => {
             <directionalLight position={[-50, 20, -20]} intensity={0.5} color="#aaddff" />
 
             <Sky sunPosition={[100, 60, -100]} turbidity={3} rayleigh={1} mieCoefficient={0.005} mieDirectionalG={0.8} />
-             <Clouds material={THREE.MeshBasicMaterial}>
-                <Cloud position={[-100, 40, -150]} speed={0.2} opacity={0.4} segments={80} bounds={[150, 20, 50]} volume={15} color="white" />
-                <Cloud position={[100, 30, -250]} speed={0.3} opacity={0.3} segments={60} bounds={[100, 15, 40]} volume={10} color="white" />
-            </Clouds>
+
+            <group>
+                <ParallaxMountains ref={bgRef1} position={[0, 0, 0]} />
+                <ParallaxMountains ref={bgRef2} position={[0, 0, -CHUNK_LENGTH_COASTAL]} />
+            </group>
 
             <group>
                 <CoastalContent ref={contentRef1} position={[0, 0, 0]} />
